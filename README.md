@@ -1,15 +1,14 @@
 # sop-query-tool
 
 A standalone retrieval-augmented question-answering app for SBA SOP 50 10 8.
-It uses a React frontend, Flask API, Replit PostgreSQL with pgvector, OpenAI
-embeddings, and Claude for context-constrained answers.
+It uses a React frontend, Flask API, Replit PostgreSQL with pgvector, and OpenAI
+embeddings/chat completions for context-constrained answers.
 
 ## Required environment
 
 - `DATABASE_URL` — provided by the Replit PostgreSQL database
 - `OPENAI_API_KEY` — Replit Secret
-- `ANTHROPIC_API_KEY` — Replit Secret
-- `ANTHROPIC_MODEL` — optional; defaults to `claude-sonnet-4-20250514`
+- `OPENAI_CHAT_MODEL` — optional; defaults to `gpt-4o-mini`
 
 Never commit API keys. Add or update them through Replit Secrets.
 

@@ -1,24 +1,25 @@
 import json
 import os
+import re
 from typing import Any
 
-from anthropic import Anthropic
 from flask import Flask, jsonify, request
 from openai import OpenAI
+from pgvector import Vector
 
 from db import connection
 
 app = Flask(__name__)
 
 EMBEDDING_MODEL = "text-embedding-3-small"
-CLAUDE_MODEL = os.getenv("ANTHROPIC_MODEL", "claude-sonnet-4-20250514")
+ANSWER_MODEL = os.getenv("OPENAI_CHAT_MODEL", "gpt-4o-mini")
 TOP_K = 6
 
 
 def require_env() -> None:
     missing = [
         key
-        for key in ("DATABASE_URL", "OPENAI_API_KEY", "ANTHROPIC_API_KEY")
+        for key in ("DATABASE_URL", "OPENAI_API_KEY")
         if not os.getenv(key)
     ]
     if missing:
@@ -52,6 +53,7 @@ def query_sop():
             .data[0]
             .embedding
         )
+        query_vector = Vector(embedding)
         with connection() as conn:
             rows = conn.execute(
                 """
@@ -60,7 +62,7 @@ def query_sop():
                 ORDER BY embedding <=> %s
                 LIMIT %s
                 """,
-                (embedding, embedding, TOP_K),
+                (query_vector, query_vector, TOP_K),
             ).fetchall()
         if not rows:
             return jsonify({"error": "No SOP content has been ingested yet."}), 503
@@ -69,25 +71,59 @@ def query_sop():
             f'<SOURCE id="{index}" section_ref="{row[0]}">\n{row[1]}\n</SOURCE>'
             for index, row in enumerate(rows, 1)
         )
-        response = Anthropic().messages.create(
-            model=CLAUDE_MODEL,
+        response = OpenAI().chat.completions.create(
+            model=ANSWER_MODEL,
             max_tokens=1800,
-            system=(
-                "Answer only from the supplied SOP context. Do not invent, extend, or "
-                "infer policy beyond the text. Clearly state when the context is "
-                "insufficient or uncertain. Return only JSON with keys answer and "
-                "citations. citations must be an array of objects with source_id, "
-                "section_ref, and quote. Every quote must be copied verbatim from one "
-                "source and should be the shortest passage that directly supports the answer."
-            ),
             messages=[
+                {
+                    "role": "system",
+                    "content": (
+                        "Answer only from the supplied SOP context. Do not invent, extend, "
+                        "or infer policy beyond the text. Clearly state when the context is "
+                        "insufficient or uncertain. Return only JSON with keys answer and "
+                        "citations. citations must be an array of objects with source_id, "
+                        "section_ref, and quote. Every quote must be copied verbatim from one "
+                        "source and should be the shortest passage that directly supports "
+                        "the answer. For an answer supported by the context, include at "
+                        "least one citation. If the context is insufficient, say so in "
+                        "answer and return an empty citations array."
+                    ),
+                },
                 {
                     "role": "user",
                     "content": f"QUESTION:\n{question}\n\nCONTEXT:\n{context}",
-                }
+                },
             ],
+            response_format={
+                "type": "json_schema",
+                "json_schema": {
+                    "name": "sop_answer",
+                    "strict": True,
+                    "schema": {
+                        "type": "object",
+                        "properties": {
+                            "answer": {"type": "string"},
+                            "citations": {
+                                "type": "array",
+                                "items": {
+                                    "type": "object",
+                                    "properties": {
+                                        "source_id": {"type": "integer"},
+                                        "section_ref": {"type": "string"},
+                                        "quote": {"type": "string"},
+                                    },
+                                    "required": ["source_id", "section_ref", "quote"],
+                                    "additionalProperties": False,
+                                },
+                            },
+                        },
+                        "required": ["answer", "citations"],
+                        "additionalProperties": False,
+                    },
+                },
+            },
         )
-        text = "".join(block.text for block in response.content if block.type == "text")
+        text = response.choices[0].message.content or ""
         result = parse_json(text)
         sources = verify_citations(result.get("citations", []), rows)
         return jsonify({"answer": str(result.get("answer", "")).strip(), "sources": sources})
@@ -123,15 +159,46 @@ def verify_citations(citations: Any, rows: list[tuple]) -> list[dict[str, Any]]:
         if source_id < 1 or source_id > len(rows):
             continue
         section_ref, chunk_text, _ = rows[source_id - 1]
+        verified_quote = find_verbatim_quote(quote, chunk_text)
+        if verified_quote is None:
+            continue
         verified.append(
             {
                 "section_ref": section_ref,
-                "quote": quote,
+                "quote": verified_quote,
                 "source_chunk": chunk_text,
-                "verified": bool(quote) and quote in chunk_text,
+                "verified": True,
             }
         )
     return verified
+
+
+def find_verbatim_quote(quote: str, source: str) -> str | None:
+    """Return a source-backed quote, repairing only formatting/trailing punctuation."""
+    if not quote.strip():
+        return None
+    if quote in source:
+        return quote
+
+    normalized_quote = re.sub(r"\s+", " ", quote).strip()
+    normalized_source = re.sub(r"\s+", " ", source).strip()
+    if normalized_quote in normalized_source:
+        return quote.strip()
+
+    # Models sometimes stop immediately before the source sentence's final
+    # punctuation. If the quoted text is an exact source prefix, return the
+    # complete sentence from the source rather than displaying an altered quote.
+    prefix = quote.strip().rstrip(".!?").rstrip()
+    if len(prefix) < 40:
+        return None
+    start = source.find(prefix)
+    if start < 0:
+        return None
+    end_match = re.search(r"[.!?](?=\s|$)", source[start + len(prefix) :])
+    if not end_match:
+        return None
+    end = start + len(prefix) + end_match.end()
+    return source[start:end]
 
 
 if __name__ == "__main__":
