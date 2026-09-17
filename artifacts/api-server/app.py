@@ -479,6 +479,14 @@ def query_sop():
             )
             if deterministic_conclusion:
                 generated["applied_conclusion"] = deterministic_conclusion
+            if (
+                re.search(r"\benvironmental\b|\bphase\s+i\b", question, re.IGNORECASE)
+                and re.search(r"\bbrand\b|\bspecific\s+(?:brand|consultant)\b", question, re.IGNORECASE)
+            ):
+                # The SOP may state qualifications without establishing a negative
+                # proposition about every possible brand. Keep the answer at source
+                # silence rather than converting absence of a brand name into a rule.
+                generated["applied_conclusion"] = {"text": "", "citations": []}
             subanswers.append(
                 {
                     "question": item["question"],
@@ -878,6 +886,19 @@ def retrieve_for_subquestion(
             """
         ).fetchall()
         add_rows(direct_rows)
+    if re.search(r"\bcollateral\b", f"{subquestion} {' '.join(search_terms or [])}", re.IGNORECASE):
+        collateral_rows = conn.execute(
+            """
+            SELECT id, sop_version, effective_date, page_number, section_ref,
+                   chunk_text, 1.0 AS similarity
+            FROM sop_chunks
+            WHERE section_ref ILIKE '%Collateral Requirements%'
+               OR section_ref ILIKE '%> Collateral%'
+            ORDER BY id
+            LIMIT 12
+            """
+        ).fetchall()
+        add_rows(collateral_rows)
     if re.search(
         r"seller[-\s]?financ|seller note|standby|subordinated debt|equity injection|"
         r"project cost|startup|start-up|injection",
