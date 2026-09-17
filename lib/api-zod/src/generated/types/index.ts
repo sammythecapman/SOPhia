@@ -13,3 +13,4 @@ export * from './sopQueryResult';
 export * from './sopQuestion';
 export * from './sopSource';
 export * from './sopSubanswer';
+export * from './sopSubanswerSupportStatus';

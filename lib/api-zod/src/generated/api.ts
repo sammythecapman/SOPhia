@@ -30,14 +30,49 @@ export const QuerySopBody = zod.object({
 
 export const QuerySopResponse = zod.object({
   "answer": zod.string(),
+  "summary": zod.string(),
   "source_version": zod.string(),
   "effective_date": zod.string(),
+  "version_warning": zod.string().nullable(),
+  "date_warning": zod.string().nullable(),
   "subanswers": zod.array(zod.object({
   "question": zod.string(),
   "answer": zod.string(),
+  "applied_conclusion": zod.union([zod.object({
+  "text": zod.string(),
+  "arithmetic_valid": zod.boolean(),
+  "citations": zod.array(zod.object({
+  "source_id": zod.number().int(),
+  "section_ref": zod.string(),
+  "quote": zod.string(),
+  "source_chunk": zod.string(),
+  "source_version": zod.string(),
+  "effective_date": zod.string(),
+  "page_number": zod.number().int().nullable(),
+  "quote_located": zod.boolean(),
+  "supports_conclusion": zod.boolean(),
+  "verified": zod.boolean()
+}))
+}),zod.null()]),
   "no_provision": zod.boolean(),
+  "support_status": zod.enum(['supported', 'not_established', 'no_responsive_provision', 'retrieval_empty']),
+  "support_note": zod.string().nullable(),
+  "searched_terms": zod.array(zod.string()),
+  "rejected_citations": zod.array(zod.object({
+  "source_id": zod.number().int(),
+  "section_ref": zod.string(),
+  "quote": zod.string(),
+  "source_chunk": zod.string(),
+  "source_version": zod.string(),
+  "effective_date": zod.string(),
+  "page_number": zod.number().int().nullable(),
+  "quote_located": zod.boolean(),
+  "supports_conclusion": zod.boolean(),
+  "verified": zod.boolean()
+})),
   "propositions": zod.array(zod.object({
   "text": zod.string(),
+  "arithmetic_valid": zod.boolean(),
   "citations": zod.array(zod.object({
   "source_id": zod.number().int(),
   "section_ref": zod.string(),
@@ -54,6 +89,7 @@ export const QuerySopResponse = zod.object({
 })),
   "other_issues": zod.array(zod.object({
   "text": zod.string(),
+  "arithmetic_valid": zod.boolean(),
   "citations": zod.array(zod.object({
   "source_id": zod.number().int(),
   "section_ref": zod.string(),

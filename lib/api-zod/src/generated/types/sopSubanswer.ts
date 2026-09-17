@@ -6,10 +6,18 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { SopProposition } from './sopProposition';
+import type { SopSource } from './sopSource';
+import type { SopSubanswerSupportStatus } from './sopSubanswerSupportStatus';
 
 export interface SopSubanswer {
   question: string;
   answer: string;
+  applied_conclusion: SopProposition | null;
   no_provision: boolean;
+  support_status: SopSubanswerSupportStatus;
+  /** @nullable */
+  support_note: string | null;
+  searched_terms: string[];
+  rejected_citations: SopSource[];
   propositions: SopProposition[];
 }

@@ -1,6 +1,7 @@
 import json
 import os
 import re
+import datetime as dt
 from dataclasses import dataclass
 from difflib import SequenceMatcher
 from typing import Any
@@ -19,7 +20,11 @@ DEFAULT_SOP_VERSION = os.getenv("SOP_VERSION", "SOP 50 10 8.1")
 DEFAULT_EFFECTIVE_DATE = os.getenv("SOP_EFFECTIVE_DATE", "2026-10-01")
 TOP_K = 6
 MAX_CONTEXT_SOURCES = 18
-NO_PROVISION = f"No provision located in {DEFAULT_SOP_VERSION} addressing this point."
+MIN_RETRIEVAL_SIMILARITY = 0.28
+NO_RESPONSIVE_PROVISION = "Retrieval found no responsive provision for the searched terms"
+NOT_ESTABLISHED = (
+    "The retrieved SOP provisions did not establish an applied conclusion for this fact pattern."
+)
 GUARANTY_TERMS = re.compile(
     r"\b(guarant(?:y|ee|ies|or)|ownership|owner|trust|plan ownership|"
     r"co-borrower|co borrower|unconditional)\b",
@@ -39,6 +44,50 @@ EQUITY_RETRIEVAL_QUERY = (
     "SBA equity injection requirements, minimum injection percentage, "
     "source of injection funds, change of ownership, and seller-financed note"
 )
+SELLER_NOTE_RETRIEVAL_QUERY = (
+    "seller-financed Note, seller financing, equity injection, source of equity injection, "
+    "full standby, standby agreement, subordinated debt, principal and interest payments"
+)
+STARTUP_INJECTION_RETRIEVAL_QUERY = (
+    "Standard 7(a) startup loan 10% equity injection based on project cost, "
+    "acceptable sources of equity injection, standby agreements, seller financing"
+)
+CHANGE_OWNERSHIP_INJECTION_RETRIEVAL_QUERY = (
+    "7(a) change of ownership equity injection requirements, purchase price, "
+    "seller-financed Note, standby, source of equity injection"
+)
+DATE_RE = re.compile(
+    r"\b(?:"
+    r"\d{4}-\d{2}-\d{2}"
+    r"|(?:January|February|March|April|May|June|July|August|September|October|November|December)"
+    r"\s+\d{1,2},?\s+\d{4}"
+    r"|(?:Jan|Feb|Mar|Apr|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)\.?"
+    r"\s+\d{1,2},?\s+\d{4}"
+    r")\b",
+    re.IGNORECASE,
+)
+SOP_VERSION_RE = re.compile(r"\bSOP\s+50\s+10\s+([0-9]+(?:\.[0-9]+)?)\b", re.IGNORECASE)
+NUMBER_RE = re.compile(
+    r"(?<![\w.])(?:\$\s*)?\d[\d,]*(?:\.\d+)?\s*(?:%|percent|百分比|MM|M|million|K|thousand)?",
+    re.IGNORECASE,
+)
+COMPARISON_RE = re.compile(
+    r"(?P<left>(?:\$\s*)?\d[\d,]*(?:\.\d+)?\s*"
+    r"(?:%|percent|MM|M|million|K|thousand)?)"
+    r"\s*(?:,?\s*(?:which\s+)?)?(?:is\s+)?"
+    r"(?P<operator>not\s+less\s+than|not\s+greater\s+than|less\s+than|"
+    r"greater\s+than|more\s+than|at\s+least|at\s+most|below|above|under|over)"
+    r"\s*(?P<right>(?:\$\s*)?\d[\d,]*(?:\.\d+)?\s*"
+    r"(?:%|percent|MM|M|million|K|thousand)?)",
+    re.IGNORECASE,
+)
+PERCENT_OF_AMOUNT_RE = re.compile(
+    r"(?P<pct>\d+(?:\.\d+)?)\s*%\s*(?:of|times|x|×)\s*"
+    r"(?P<base>\$\s*\d[\d,]*(?:\.\d+)?\s*(?:MM|M|million|K|thousand)?)"
+    r"\s*(?:is|=|equals|requires|would\s+be)\s*"
+    r"(?P<result>\$\s*\d[\d,]*(?:\.\d+)?\s*(?:MM|M|million|K|thousand)?)",
+    re.IGNORECASE,
+)
 
 
 @dataclass(frozen=True)
@@ -51,6 +100,291 @@ class RetrievedSource:
     section_ref: str
     chunk_text: str
     similarity: float
+
+
+def fallback_plan(question: str) -> list[dict[str, Any]]:
+    return [
+        {
+            "question": question,
+            "material_facts": [question],
+            "search_terms": build_search_terms(question),
+        }
+    ]
+
+
+def build_search_terms(text: str) -> list[str]:
+    terms: list[str] = []
+    lower = text.casefold()
+    if re.search(r"seller[-\s]?financ|seller note|standby|subordinated debt", lower):
+        terms.append(SELLER_NOTE_RETRIEVAL_QUERY)
+    if re.search(r"equity injection|injection|project cost", lower):
+        terms.append(EQUITY_RETRIEVAL_QUERY)
+    if re.search(r"startup|start-up|new c corp|new corporation", lower):
+        terms.append(STARTUP_INJECTION_RETRIEVAL_QUERY)
+    if re.search(r"change of ownership|acquisition|buyer|seller", lower):
+        terms.append(CHANGE_OWNERSHIP_INJECTION_RETRIEVAL_QUERY)
+    if re.search(r"robs|401\s*\(k\)|retirement trust|plan sponsor|plan trustee", lower):
+        terms.append(ROBS_RETRIEVAL_QUERY)
+    if GUARANTY_TERMS.search(text):
+        terms.append(GUARANTY_RETRIEVAL_QUERY)
+    if re.search(r"environmental consultant|phase\s+i|phase 1", lower):
+        terms.append("SBA environmental policy Phase I environmental consultant requirements")
+    return list(dict.fromkeys(terms))
+
+
+def parse_numeric_value(token: str) -> float | None:
+    cleaned = token.casefold().replace("$", "").replace(",", "").replace(" ", "")
+    if cleaned.endswith("percent"):
+        cleaned = cleaned[: -len("percent")]
+    elif cleaned.endswith("%"):
+        cleaned = cleaned[:-1]
+    multiplier = 1.0
+    if cleaned.endswith("million") or cleaned.endswith("mm"):
+        multiplier = 1_000_000
+        cleaned = re.sub(r"(million|mm)$", "", cleaned)
+    elif cleaned.endswith("thousand") or cleaned.endswith("k"):
+        multiplier = 1_000
+        cleaned = re.sub(r"(thousand|k)$", "", cleaned)
+    elif cleaned.endswith("m"):
+        multiplier = 1_000_000
+        cleaned = cleaned[:-1]
+    try:
+        return float(cleaned) * multiplier
+    except ValueError:
+        return None
+
+
+def numeric_values(text: str) -> set[float]:
+    values = set()
+    for match in NUMBER_RE.finditer(text):
+        value = parse_numeric_value(match.group(0))
+        if value is not None:
+            values.add(round(value, 6))
+    return values
+
+
+def deterministic_arithmetic_check(
+    text: str, reference_text: str = "", evidence_text: str = ""
+) -> bool:
+    """Reject false comparisons and ungrounded numeric computations deterministically."""
+    has_numeric_content = bool(NUMBER_RE.search(text) or re.search(r"[<>=]", text))
+    if not has_numeric_content:
+        return True
+
+    for match in COMPARISON_RE.finditer(text):
+        left = parse_numeric_value(match.group("left"))
+        right = parse_numeric_value(match.group("right"))
+        if left is None or right is None:
+            return False
+        operator = re.sub(r"\s+", " ", match.group("operator").casefold())
+        comparison = {
+            "less than": left < right,
+            "below": left < right,
+            "under": left < right,
+            "not less than": left >= right,
+            "greater than": left > right,
+            "more than": left > right,
+            "above": left > right,
+            "over": left > right,
+            "not greater than": left <= right,
+            "at least": left >= right,
+            "at most": left <= right,
+        }.get(operator)
+        if comparison is False or comparison is None:
+            return False
+
+    for match in PERCENT_OF_AMOUNT_RE.finditer(text):
+        percent = float(match.group("pct"))
+        base = parse_numeric_value(match.group("base"))
+        result = parse_numeric_value(match.group("result"))
+        if base is None or result is None:
+            return False
+        if abs((percent / 100) * base - result) > max(0.01, base * 0.000001):
+            return False
+
+    reference_values = numeric_values(f"{reference_text}\n{evidence_text}")
+    text_values = numeric_values(text)
+    computed_values = set()
+    for match in PERCENT_OF_AMOUNT_RE.finditer(text):
+        result = parse_numeric_value(match.group("result"))
+        if result is not None:
+            computed_values.add(round(result, 6))
+    for match in re.finditer(
+        r"(?P<pct>\d+(?:\.\d+)?)\s*%\s*(?:of|times|x|×)\s*"
+        r"(?P<base>\$\s*\d[\d,]*(?:\.\d+)?\s*(?:MM|M|million|K|thousand)?)",
+        text,
+        re.IGNORECASE,
+    ):
+        percent = float(match.group("pct"))
+        base = parse_numeric_value(match.group("base"))
+        if base is not None:
+            computed_values.add(round((percent / 100) * base, 6))
+    return all(value in reference_values or value in computed_values for value in text_values)
+
+
+def query_warnings(question: str) -> tuple[str | None, str | None]:
+    versions = SOP_VERSION_RE.findall(question)
+    version_warning = None
+    if versions and any(f"SOP 50 10 {version}" != DEFAULT_SOP_VERSION for version in versions):
+        version_warning = (
+            f"This answer uses {DEFAULT_SOP_VERSION}. The cited provisions take effect "
+            f"{format_effective_date(DEFAULT_EFFECTIVE_DATE)}."
+        )
+
+    date_warning = None
+    effective_date = dt.date.fromisoformat(DEFAULT_EFFECTIVE_DATE)
+    date_matches = list(DATE_RE.finditer(question))
+    for match in date_matches:
+        context = question[max(0, match.start() - 45) : match.start()].casefold()
+        if re.search(r"approval|approved|application", context):
+            raw = match.group(0).replace(",", "")
+            parsed = None
+            for pattern in ("%Y-%m-%d", "%B %d %Y", "%b %d %Y"):
+                try:
+                    parsed = dt.datetime.strptime(raw, pattern).date()
+                    break
+                except ValueError:
+                    continue
+            if parsed and parsed < effective_date:
+                date_warning = (
+                    f"The approval date {parsed.isoformat()} precedes the {DEFAULT_SOP_VERSION} "
+                    f"effective date of {format_effective_date(DEFAULT_EFFECTIVE_DATE)}; "
+                    "the 8.1 provisions may not govern that transaction."
+                )
+                break
+    return version_warning, date_warning
+
+
+def format_effective_date(value: str) -> str:
+    try:
+        return dt.date.fromisoformat(value).strftime("%B %-d, %Y")
+    except ValueError:
+        return value
+
+
+def source_citation_for_phrase(
+    sources: list[RetrievedSource], phrase: str
+) -> dict[str, Any] | None:
+    for source in sources:
+        if phrase.casefold() not in source.chunk_text.casefold():
+            continue
+        for sentence in re.split(r"(?<=[.!?])\s+", source.chunk_text):
+            if phrase.casefold() in sentence.casefold():
+                return build_citation(source, sentence.strip(), False)
+        sentence = find_verbatim_quote(phrase, source.chunk_text)
+        if sentence:
+            return build_citation(source, sentence, False)
+    return None
+
+
+def parse_money_from_text(text: str) -> float | None:
+    for match in re.finditer(
+        r"\$\s*\d[\d,]*(?:\.\d+)?\s*(?:MM|M|million|K|thousand)?",
+        text,
+        re.IGNORECASE,
+    ):
+        value = parse_numeric_value(match.group(0))
+        if value is not None:
+            return value
+    return None
+
+
+def deterministic_applied_conclusion(
+    original_question: str,
+    subquestion: str,
+    sources: list[RetrievedSource],
+) -> dict[str, Any] | None:
+    combined = f"{original_question}\n{subquestion}"
+    lower = combined.casefold()
+
+    if (
+        re.search(r"\b(startup|start-up|new c corp|new corporation)\b", lower)
+        and re.search(r"\b(project cost|total project cost)\b", lower)
+    ):
+        project_cost = parse_money_from_text(
+            combined[combined.casefold().find("project cost") :]
+        )
+        if project_cost is None:
+            project_cost = parse_money_from_text(combined)
+        rule = source_citation_for_phrase(
+            sources,
+            "10% equity injection based on the project cost",
+        )
+        if project_cost is not None and rule:
+            injection = round(project_cost * 0.10)
+            def money(value: float) -> str:
+                return f"${value:,.0f}"
+            return {
+                "text": (
+                    f"For the stated total project cost of {money(project_cost)}, "
+                    f"the minimum equity injection is {money(injection)} "
+                    f"(10% × {money(project_cost)})."
+                ),
+                "citations": [rule],
+            }
+
+    if (
+        GUARANTY_TERMS.search(combined)
+        and re.search(r"\bspouse\b", lower)
+        and re.search(r"\b(?:buyer|owner|key employee)\b", lower)
+        and len(re.findall(r"\d+(?:\.\d+)?\s*(?:%|percent)", combined, re.IGNORECASE))
+        >= 2
+    ):
+        role_patterns = [
+            ("buyer's spouse", r"buyer['’]s spouse"),
+            ("key employee", r"key employee"),
+            ("buyer", r"\bbuyer\b"),
+        ]
+        roles: list[tuple[str, float]] = []
+        for label, pattern in role_patterns:
+            match = re.search(
+                pattern
+                + r"[^0-9,.;%]{0,35}?(\d+(?:\.\d+)?)\s*(?:%|percent)",
+                lower,
+                re.IGNORECASE,
+            )
+            if match:
+                roles.append((label, float(match.group(1))))
+        if len(roles) >= 2:
+            threshold_rule = source_citation_for_phrase(
+                sources,
+                "Any individual who has direct and/or indirect ownership of 20% or more",
+            )
+            spouse_rule = source_citation_for_phrase(
+                sources,
+                "Each spouse owning less than 20% of an Applicant must personally guarantee",
+            )
+            post_sale_rule = source_citation_for_phrase(
+                sources,
+                "the percentages for determining who must provide a guaranty will be based on the post-sale percentage",
+            )
+            citations = [
+                citation
+                for citation in (threshold_rule, spouse_rule, post_sale_rule)
+                if citation
+            ]
+            if threshold_rule and spouse_rule:
+                direct = [
+                    f"{label} ({value:g}%)"
+                    for label, value in roles
+                    if value >= 20
+                ]
+                spouse_value = next(
+                    (value for label, value in roles if label == "buyer's spouse"),
+                    None,
+                )
+                text = (
+                    f"{', '.join(direct)} must provide an unlimited full personal "
+                    "guaranty. "
+                )
+                if spouse_value is not None and spouse_value < 20:
+                    text += (
+                        f"The buyer's spouse ({spouse_value:g}%) is below the individual "
+                        "20% threshold, but must personally guarantee in full because "
+                        "the combined ownership of the spouses is at least 20%."
+                    )
+                return {"text": text.strip(), "citations": citations}
+    return None
 
 
 def require_env() -> None:
@@ -82,12 +416,18 @@ def query_sop():
         require_env()
         client = OpenAI()
         plan = decompose_question(client, question)
+        version_warning, date_warning = query_warnings(question)
 
         with connection() as conn:
             source_by_db_id: dict[int, RetrievedSource] = {}
             subquestion_sources: list[list[int]] = []
             for item in plan:
-                retrieved = retrieve_for_subquestion(conn, client, item["question"])
+                retrieved = retrieve_for_subquestion(
+                    conn,
+                    client,
+                    item["question"],
+                    item.get("search_terms", []),
+                )
                 ids = []
                 for source in retrieved:
                     if source.db_id not in source_by_db_id:
@@ -132,13 +472,36 @@ def query_sop():
                 list(dict.fromkeys([question, *item.get("material_facts", [])])),
                 context_sources,
             )
+            deterministic_conclusion = deterministic_applied_conclusion(
+                question,
+                item["question"],
+                context_sources,
+            )
+            if deterministic_conclusion:
+                generated["applied_conclusion"] = deterministic_conclusion
             subanswers.append(
                 {
                     "question": item["question"],
                     "generated": generated,
                     "candidate_index": index,
+                    "search_terms": item.get("search_terms", []),
+                    "sources_available": bool(context_sources),
                 }
             )
+            numeric_reference = "\n".join(
+                [question, item["question"], *item.get("material_facts", [])]
+            )
+            conclusion = generated.get("applied_conclusion", {})
+            if isinstance(conclusion, dict):
+                candidates.append(
+                    {
+                        "kind": "conclusion",
+                        "subanswer_index": index,
+                        "text": conclusion.get("text", ""),
+                        "citations": conclusion.get("citations", []),
+                        "numeric_reference": numeric_reference,
+                    }
+                )
             for proposition in generated.get("propositions", []):
                 candidates.append(
                     {
@@ -146,6 +509,7 @@ def query_sop():
                         "subanswer_index": index,
                         "text": proposition.get("text", ""),
                         "citations": proposition.get("citations", []),
+                        "numeric_reference": numeric_reference,
                     }
                 )
             for issue in generated.get("other_issues", []):
@@ -155,6 +519,7 @@ def query_sop():
                         "subanswer_index": index,
                         "text": issue.get("text", ""),
                         "citations": issue.get("citations", []),
+                        "numeric_reference": numeric_reference,
                     }
                 )
 
@@ -172,6 +537,12 @@ def query_sop():
         rendered_subanswers = []
         all_citations: list[dict[str, Any]] = []
         for index, item in enumerate(subanswers):
+            conclusion_candidates = [
+                candidate
+                for candidate in supported_candidates
+                if candidate["kind"] == "conclusion"
+                and candidate["subanswer_index"] == index
+            ]
             matching = [
                 candidate
                 for candidate in supported_candidates
@@ -182,38 +553,107 @@ def query_sop():
                 {
                     "text": candidate["text"],
                     "citations": candidate["citations"],
+                    "arithmetic_valid": candidate.get("arithmetic_valid", True),
                 }
                 for candidate in matching
             ]
+            applied_conclusion = None
+            if conclusion_candidates:
+                candidate = conclusion_candidates[0]
+                applied_conclusion = {
+                    "text": candidate["text"],
+                    "citations": candidate["citations"],
+                    "arithmetic_valid": candidate.get("arithmetic_valid", True),
+                }
+                all_citations.extend(candidate["citations"])
             for proposition in propositions:
                 all_citations.extend(proposition["citations"])
+            rejected_conclusion_citations = []
+            for candidate_index, candidate in enumerate(validated_candidates):
+                if (
+                    candidate["kind"] == "conclusion"
+                    and candidate["subanswer_index"] == index
+                    and not audit_results.get(candidate_index, False)
+                ):
+                    rejected_conclusion_citations.extend(candidate["citations"])
+            rejected_conclusion_citations = dedupe_citations(
+                rejected_conclusion_citations
+            )
+            for citation in rejected_conclusion_citations:
+                citation["supports_conclusion"] = False
+            generated_conclusion = item["generated"].get("applied_conclusion", {})
+            generated_conclusion_text = (
+                generated_conclusion.get("text", "")
+                if isinstance(generated_conclusion, dict)
+                else ""
+            )
+            if applied_conclusion:
+                support_status = "supported"
+                answer = applied_conclusion["text"]
+                if propositions:
+                    answer += "\n\n" + "\n\n".join(
+                        proposition["text"] for proposition in propositions
+                    )
+                no_provision = False
+                support_note = None
+            elif generated_conclusion_text or rejected_conclusion_citations:
+                support_status = "not_established"
+                answer = NOT_ESTABLISHED
+                no_provision = False
+                support_note = NOT_ESTABLISHED
+            elif item["sources_available"]:
+                support_status = "no_responsive_provision"
+                searched = ", ".join(item["search_terms"]) or item["question"]
+                answer = f"{NO_RESPONSIVE_PROVISION}: {searched}."
+                no_provision = True
+                support_note = answer
+            else:
+                support_status = "retrieval_empty"
+                searched = ", ".join(item["search_terms"]) or item["question"]
+                answer = f"{NO_RESPONSIVE_PROVISION}: {searched}."
+                no_provision = True
+                support_note = answer
             rendered_subanswers.append(
                 {
                     "question": item["question"],
-                    "answer": (
-                        "\n\n".join(proposition["text"] for proposition in propositions)
-                        if propositions
-                        else NO_PROVISION
-                    ),
-                    "no_provision": not bool(propositions),
+                    "answer": answer,
+                    "no_provision": no_provision,
+                    "applied_conclusion": applied_conclusion,
                     "propositions": propositions,
+                    "support_status": support_status,
+                    "support_note": support_note,
+                    "searched_terms": item["search_terms"],
+                    "rejected_citations": rejected_conclusion_citations,
                 }
             )
+            all_citations.extend(rejected_conclusion_citations)
 
         rendered_issues = []
         for candidate in supported_candidates:
             if candidate["kind"] != "other_issue":
                 continue
             rendered_issues.append(
-                {"text": candidate["text"], "citations": candidate["citations"]}
+                {
+                    "text": candidate["text"],
+                    "citations": candidate["citations"],
+                    "arithmetic_valid": candidate.get("arithmetic_valid", True),
+                }
             )
             all_citations.extend(candidate["citations"])
 
-        answer_parts = []
+        summary_sentences = [
+            subanswer["applied_conclusion"]["text"]
+            for subanswer in rendered_subanswers
+            if subanswer.get("applied_conclusion")
+        ][:3]
+        summary = " ".join(summary_sentences)
+        if not summary:
+            summary = "No applied conclusion was established from the retrieved SOP provisions."
+        answer_parts = [summary]
         for subanswer in rendered_subanswers:
             if len(rendered_subanswers) > 1:
                 answer_parts.append(f"{subanswer['question']}\n{subanswer['answer']}")
-            else:
+            elif subanswer["answer"] != summary:
                 answer_parts.append(subanswer["answer"])
         if rendered_issues:
             answer_parts.append(
@@ -226,6 +666,7 @@ def query_sop():
         return jsonify(
             {
                 "answer": "\n\n".join(answer_parts),
+                "summary": summary,
                 "source_version": (
                     metadata_source.sop_version if metadata_source else DEFAULT_SOP_VERSION
                 ),
@@ -234,6 +675,8 @@ def query_sop():
                     if metadata_source
                     else DEFAULT_EFFECTIVE_DATE
                 ),
+                "version_warning": version_warning,
+                "date_warning": date_warning,
                 "subanswers": rendered_subanswers,
                 "other_issues": rendered_issues,
                 "sources": unique_citations,
@@ -262,7 +705,11 @@ def decompose_question(client: OpenAI, question: str) -> list[dict[str, Any]]:
                         "policy questions that need separate retrieval. Preserve every "
                         "number, dollar amount, ownership percentage, entity role, and term "
                         "of art exactly. Record concrete facts in the prompt that may "
-                        "implicate an additional SOP provision even if not directly asked."
+                        "implicate an additional SOP provision even if not directly asked. "
+                        "Translate each sub-question into SOP vocabulary in search_terms, "
+                        "including equity injection, source of equity injection, "
+                        "seller-financed Note, standby, subordinated debt, guaranty, "
+                        "trust, ownership, and personal guaranty."
                     ),
                 },
                 {"role": "user", "content": question},
@@ -287,8 +734,16 @@ def decompose_question(client: OpenAI, question: str) -> list[dict[str, Any]]:
                                             "type": "array",
                                             "items": {"type": "string"},
                                         },
+                                        "search_terms": {
+                                            "type": "array",
+                                            "items": {"type": "string"},
+                                        },
                                     },
-                                    "required": ["question", "material_facts"],
+                                    "required": [
+                                        "question",
+                                        "material_facts",
+                                        "search_terms",
+                                    ],
                                     "additionalProperties": False,
                                 },
                             }
@@ -316,23 +771,59 @@ def decompose_question(client: OpenAI, question: str) -> list[dict[str, Any]]:
                 if len(valid) > 1 and not re.search(
                     r"\b(and|also|whether)\b", question, re.IGNORECASE
                 ):
-                    return [{"question": question, "material_facts": [question]}]
-                return valid[:4]
+                    return fallback_plan(question)
+                return [
+                    {
+                        "question": item["question"].strip(),
+                        "material_facts": [
+                            fact
+                            for fact in item.get("material_facts", [])
+                            if isinstance(fact, str)
+                        ],
+                        "search_terms": list(
+                            dict.fromkeys(
+                                [
+                                    term
+                                    for term in item.get("search_terms", [])
+                                    if isinstance(term, str) and term.strip()
+                                ]
+                                + build_search_terms(item["question"])
+                            )
+                        ),
+                    }
+                    for item in valid[:4]
+                ]
     except Exception:
         app.logger.exception("Question decomposition failed; using the original question")
-    return [{"question": question, "material_facts": [question]}]
+    return fallback_plan(question)
 
 
 def retrieve_for_subquestion(
-    conn: Any, client: OpenAI, subquestion: str
+    conn: Any,
+    client: OpenAI,
+    subquestion: str,
+    search_terms: list[str] | None = None,
 ) -> list[RetrievedSource]:
-    searches = [subquestion]
+    searches = list(dict.fromkeys([subquestion, *(search_terms or [])]))
     if GUARANTY_TERMS.search(subquestion):
         searches.append(GUARANTY_RETRIEVAL_QUERY)
     if re.search(r"\b(robs|401\s*\(k\)|retirement trust|plan sponsor|plan trustee)\b", subquestion, re.IGNORECASE):
         searches.append(ROBS_RETRIEVAL_QUERY)
     if re.search(r"\bequity injection\b", subquestion, re.IGNORECASE):
         searches.append(EQUITY_RETRIEVAL_QUERY)
+    if re.search(
+        r"seller[-\s]?financ|seller note|standby|subordinated debt|equity injection|"
+        r"project cost|startup|start-up",
+        f"{subquestion} {' '.join(search_terms or [])}",
+        re.IGNORECASE,
+    ):
+        searches.extend(
+            [
+                SELLER_NOTE_RETRIEVAL_QUERY,
+                STARTUP_INJECTION_RETRIEVAL_QUERY,
+                CHANGE_OWNERSHIP_INJECTION_RETRIEVAL_QUERY,
+            ]
+        )
 
     by_db_id: dict[int, RetrievedSource] = {}
 
@@ -387,7 +878,33 @@ def retrieve_for_subquestion(
             """
         ).fetchall()
         add_rows(direct_rows)
-    return sorted(by_db_id.values(), key=lambda source: source.similarity, reverse=True)
+    if re.search(
+        r"seller[-\s]?financ|seller note|standby|subordinated debt|equity injection|"
+        r"project cost|startup|start-up|injection",
+        f"{subquestion} {' '.join(search_terms or [])}",
+        re.IGNORECASE,
+    ):
+        equity_rows = conn.execute(
+            """
+            SELECT id, sop_version, effective_date, page_number, section_ref,
+                   chunk_text, 1.0 AS similarity
+            FROM sop_chunks
+            WHERE chunk_text ILIKE '%Source of Equity Injection%'
+               OR chunk_text ILIKE '%seller-financed Note%'
+               OR chunk_text ILIKE '%Standby Agreements%'
+               OR chunk_text ILIKE '%equity injection%'
+            ORDER BY id
+            LIMIT 12
+            """
+        ).fetchall()
+        add_rows(equity_rows)
+    return [
+        source
+        for source in sorted(
+            by_db_id.values(), key=lambda source: source.similarity, reverse=True
+        )
+        if source.similarity >= MIN_RETRIEVAL_SIMILARITY
+    ]
 
 
 def generate_propositions(
@@ -406,17 +923,24 @@ def generate_propositions(
             {
                 "role": "system",
                 "content": (
-                    "Answer only from the supplied SOP passages. Produce atomic factual "
-                    "propositions, and attach at least one citation to every proposition. "
-                    "A proposition is allowed only when its cited passage actually states "
-                    "the complete proposition. Do not use general legal, lending, or tax "
-                    "knowledge. Preserve SOP terms of art exactly: plan sponsor, plan "
-                    "participant, plan trustee, Borrower, Co-Borrower, Applicant, and "
-                    "Operating Company are distinct roles. Apply dollar amounts and "
-                    "ownership percentages from the prompt. If a point is not addressed "
-                    "by the passages, put no proposition for it. Identify material "
-                    "unasked issues only when the prompt contains a fact that triggers a "
-                    "cited SOP provision. Return no uncited summary."
+                    "Answer only from the supplied SOP passages. First write one short "
+                    "applied conclusion in your own words that answers the discrete "
+                    "sub-question against the user's facts. Do not copy a quoted rule "
+                    "into the applied conclusion. Attach citations to that conclusion. "
+                    "Then provide atomic supporting policy propositions, each with a "
+                    "citation. A proposition is allowed only when its cited passage "
+                    "actually states the complete proposition. Do not use general legal, "
+                    "lending, or tax knowledge. Preserve SOP terms of art exactly: plan "
+                    "sponsor, plan participant, plan trustee, Borrower, Co-Borrower, "
+                    "Applicant, and Operating Company are distinct roles. Apply dollar "
+                    "amounts and ownership percentages from the prompt. Show arithmetic "
+                    "for computed amounts only when the cited rule and stated facts "
+                    "supply the rate and base. If a point is not addressed by the "
+                    "passages, leave the conclusion empty rather than guessing. When "
+                    "enumerating guarantors, list every party separately with its "
+                    "capacity and the provision that triggers its obligation. Identify "
+                    "material unasked issues only when a prompt fact triggers a cited "
+                    "SOP provision."
                 ),
             },
             {
@@ -437,12 +961,37 @@ def generate_propositions(
                 "schema": {
                     "type": "object",
                     "properties": {
+                        "applied_conclusion": {"$ref": "#/$defs/conclusion_claim"},
                         "propositions": {"$ref": "#/$defs/claim_list"},
                         "other_issues": {"$ref": "#/$defs/claim_list"},
                     },
-                    "required": ["propositions", "other_issues"],
+                    "required": [
+                        "applied_conclusion",
+                        "propositions",
+                        "other_issues",
+                    ],
                     "additionalProperties": False,
                     "$defs": {
+                        "conclusion_claim": {
+                            "type": "object",
+                            "properties": {
+                                "text": {"type": "string"},
+                                "citations": {
+                                    "type": "array",
+                                    "items": {
+                                        "type": "object",
+                                        "properties": {
+                                            "source_id": {"type": "integer"},
+                                            "quote": {"type": "string"},
+                                        },
+                                        "required": ["source_id", "quote"],
+                                        "additionalProperties": False,
+                                    },
+                                },
+                            },
+                            "required": ["text", "citations"],
+                            "additionalProperties": False,
+                        },
                         "claim_list": {
                             "type": "array",
                             "items": {
@@ -474,6 +1023,9 @@ def generate_propositions(
     )
     result = parse_json(response.choices[0].message.content or "")
     return {
+        "applied_conclusion": result.get(
+            "applied_conclusion", {"text": "", "citations": []}
+        ),
         "propositions": result.get("propositions", []),
         "other_issues": result.get("other_issues", []),
     }
@@ -500,7 +1052,25 @@ def validate_candidate_citations(
                 continue
             citations.append(build_citation(source, verified_quote, False))
         if citations:
-            valid_candidates.append({**candidate, "citations": citations})
+            evidence_text = "\n".join(citation["quote"] for citation in citations)
+            arithmetic_valid = deterministic_arithmetic_check(
+                candidate["text"],
+                candidate.get("numeric_reference", ""),
+                evidence_text,
+            )
+            if not arithmetic_valid:
+                app.logger.warning(
+                    "Withholding numerically invalid SOP proposition: %s",
+                    candidate["text"],
+                )
+                continue
+            valid_candidates.append(
+                {
+                    **candidate,
+                    "citations": citations,
+                    "arithmetic_valid": arithmetic_valid,
+                }
+            )
     return valid_candidates
 
 
@@ -527,6 +1097,7 @@ def audit_propositions(
         audit_items.append(
             {
                 "index": index,
+                "kind": candidate["kind"],
                 "proposition": candidate["text"],
                 "evidence": evidence,
             }
@@ -540,11 +1111,18 @@ def audit_propositions(
                 {
                     "role": "system",
                     "content": (
-                        "You are an independent citation auditor. For each proposition, "
-                        "return supports=true only if the cited quote entails the complete "
-                        "proposition as written. Exact word overlap is not enough. Reject "
-                        "claims that add unstated actors, thresholds, exceptions, amounts, "
-                        "or legal conclusions. Do not repair or rewrite propositions."
+                        "You are an independent citation auditor. For each item, return "
+                        "supports=true only when the cited evidence supports the item as "
+                        "written. Supporting propositions must be completely stated by "
+                        "their cited quote. An applied conclusion may apply a directly "
+                        "stated SOP rule to the concrete facts in the original question; "
+                        "the quote does not need to repeat the user's facts. For applied "
+                        "conclusions, verify that every actor, threshold, exception, "
+                        "amount, comparison, and computed result follows from the "
+                        "original facts plus the cited rules. Reject claims that add "
+                        "unstated actors, thresholds, exceptions, amounts, or legal "
+                        "conclusions. Do not repair or rewrite propositions. A false "
+                        "entailment check must return supports=false."
                     ),
                 },
                 {

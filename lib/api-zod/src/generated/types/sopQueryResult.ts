@@ -11,8 +11,13 @@ import type { SopSubanswer } from './sopSubanswer';
 
 export interface SopQueryResult {
   answer: string;
+  summary: string;
   source_version: string;
   effective_date: string;
+  /** @nullable */
+  version_warning: string | null;
+  /** @nullable */
+  date_warning: string | null;
   subanswers: SopSubanswer[];
   other_issues: SopProposition[];
   sources: SopSource[];

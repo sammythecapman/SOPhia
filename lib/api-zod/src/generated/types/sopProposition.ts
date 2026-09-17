@@ -9,5 +9,6 @@ import type { SopSource } from './sopSource';
 
 export interface SopProposition {
   text: string;
+  arithmetic_valid: boolean;
   citations: SopSource[];
 }

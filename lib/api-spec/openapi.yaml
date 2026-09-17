@@ -113,11 +113,13 @@ components:
       properties:
         text:
           type: string
+        arithmetic_valid:
+          type: boolean
         citations:
           type: array
           items:
             $ref: "#/components/schemas/SopSource"
-      required: [text, citations]
+      required: [text, arithmetic_valid, citations]
     SopSubanswer:
       type: object
       properties:
@@ -125,22 +127,54 @@ components:
           type: string
         answer:
           type: string
+        applied_conclusion:
+          anyOf:
+            - $ref: "#/components/schemas/SopProposition"
+            - type: "null"
         no_provision:
           type: boolean
+        support_status:
+          type: string
+          enum: [supported, not_established, no_responsive_provision, retrieval_empty]
+        support_note:
+          type: [string, "null"]
+        searched_terms:
+          type: array
+          items:
+            type: string
+        rejected_citations:
+          type: array
+          items:
+            $ref: "#/components/schemas/SopSource"
         propositions:
           type: array
           items:
             $ref: "#/components/schemas/SopProposition"
-      required: [question, answer, no_provision, propositions]
+      required:
+        - question
+        - answer
+        - applied_conclusion
+        - no_provision
+        - support_status
+        - support_note
+        - searched_terms
+        - rejected_citations
+        - propositions
     SopQueryResult:
       type: object
       properties:
         answer:
           type: string
+        summary:
+          type: string
         source_version:
           type: string
         effective_date:
           type: string
+        version_warning:
+          type: [string, "null"]
+        date_warning:
+          type: [string, "null"]
         subanswers:
           type: array
           items:
@@ -155,8 +189,11 @@ components:
             $ref: "#/components/schemas/SopSource"
       required:
         - answer
+        - summary
         - source_version
         - effective_date
+        - version_warning
+        - date_warning
         - subanswers
         - other_issues
         - sources

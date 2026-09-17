@@ -96,5 +96,69 @@
     "expected_sections": [],
     "expected_facts": [],
     "unsupported": true
+  },
+  {
+    "id": "threshold-arithmetic-spouse",
+    "question": "A $2.4MM 7(a) change of ownership closes in November 2026. Post-sale ownership is buyer 45 percent, buyer's spouse 19 percent, and a key employee 36 percent. Who must provide an unlimited full personal guaranty, and does the spouse's interest change the analysis?",
+    "expected_sections": ["Guaranties", "Personal Guaranties"],
+    "expected_facts": ["45%", "19%", "36%", "20%"],
+    "unsupported": false,
+    "expect_arithmetic": true
+  },
+  {
+    "id": "seller-note-standby",
+    "question": "A December 2026 acquisition has a $300,000 seller note that the lender wants to count toward the 10 percent injection. Does it count, and what standby terms would be required?",
+    "expected_sections": ["Underwriting", "Uses of Proceeds"],
+    "expected_facts": ["seller-financed Note", "standby", "10%"],
+    "unsupported": false,
+    "expect_arithmetic": true
+  },
+  {
+    "id": "unsupported-environmental-consultant",
+    "question": "Does the SOP require a specific brand of environmental consultant for a Phase I?",
+    "expected_sections": [],
+    "expected_facts": [],
+    "unsupported": true
+  },
+  {
+    "id": "multi-capacity-guarantors",
+    "question": "A ROBS-funded borrower closes in January 2027 where a profit sharing plan holds 55 percent, the individual holds 45 percent directly, and the individual is sole participant and trustee. List every required guarantor and the capacity in which each signs.",
+    "expected_sections": ["401(k) Plans Including Rollovers as Business Start-ups (ROBS) Plans", "Guaranties"],
+    "expected_facts": ["55%", "45%", "participant", "trustee"],
+    "unsupported": false,
+    "expect_arithmetic": true
+  },
+  {
+    "id": "startup-injection-computation",
+    "question": "A $1.2MM 7(a) startup loan funds a new C corp in November 2026 with a total project cost of $1.45MM. State the minimum injection in dollars and the acceptable sources.",
+    "expected_sections": ["Underwriting"],
+    "expected_facts": ["10%", "$145,000"],
+    "unsupported": false,
+    "expect_arithmetic": true
+  },
+  {
+    "id": "partial-change-one-unanswerable-half",
+    "question": "For a February 2027 partial change of ownership, does the remaining owner have to guarantee, and what is the market rate for a seller note in this deal?",
+    "expected_sections": ["Guaranties", "Personal Guaranties"],
+    "expected_facts": ["guarantee", "seller note"],
+    "unsupported": false,
+    "expect_not_established": true
+  },
+  {
+    "id": "adversarial-collateral-entailment",
+    "question": "What collateral is required when a 7(a) loan has a collateral shortfall?",
+    "expected_sections": ["Collateral"],
+    "expected_facts": ["collateral shortfall"],
+    "unsupported": false,
+    "forbidden_supported_sections": ["Guaranties", "Personal Guaranties"],
+    "expect_arithmetic": false
+  },
+  {
+    "id": "effective-date-approval",
+    "question": "A loan was approved September 20, 2026 and closes November 2026. Which SOP governs?",
+    "expected_sections": [],
+    "expected_facts": ["September 20, 2026", "8.1"],
+    "unsupported": false,
+    "expect_date_warning": true
   }
 ]

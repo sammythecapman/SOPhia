@@ -33,20 +33,42 @@ export interface SopSource {
 
 export interface SopProposition {
   text: string;
+  arithmetic_valid: boolean;
   citations: SopSource[];
 }
+
+export type SopSubanswerSupportStatus = typeof SopSubanswerSupportStatus[keyof typeof SopSubanswerSupportStatus];
+
+
+export const SopSubanswerSupportStatus = {
+  supported: 'supported',
+  not_established: 'not_established',
+  no_responsive_provision: 'no_responsive_provision',
+  retrieval_empty: 'retrieval_empty',
+} as const;
 
 export interface SopSubanswer {
   question: string;
   answer: string;
+  applied_conclusion: SopProposition | null;
   no_provision: boolean;
+  support_status: SopSubanswerSupportStatus;
+  /** @nullable */
+  support_note: string | null;
+  searched_terms: string[];
+  rejected_citations: SopSource[];
   propositions: SopProposition[];
 }
 
 export interface SopQueryResult {
   answer: string;
+  summary: string;
   source_version: string;
   effective_date: string;
+  /** @nullable */
+  version_warning: string | null;
+  /** @nullable */
+  date_warning: string | null;
   subanswers: SopSubanswer[];
   other_issues: SopProposition[];
   sources: SopSource[];

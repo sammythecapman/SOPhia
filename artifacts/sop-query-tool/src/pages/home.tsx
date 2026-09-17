@@ -57,9 +57,11 @@ function CitationCard({ source }: { source: SopSource }) {
             <CardTitle className="text-sm font-sans leading-relaxed text-primary">
               {source.section_ref}
             </CardTitle>
-            <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+            <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
               <span>{source.source_version}</span>
+              <span aria-hidden="true">·</span>
               <span>Effective {formatDate(source.effective_date)}</span>
+              <span aria-hidden="true">·</span>
               <span>
                 {source.page_number ? `Page ${source.page_number}` : "Page not recorded"}
               </span>
@@ -118,14 +120,32 @@ function CitationCard({ source }: { source: SopSource }) {
   );
 }
 
-function Proposition({ proposition }: { proposition: SopProposition }) {
+function Proposition({
+  proposition,
+  seenCitationIds,
+}: {
+  proposition: SopProposition;
+  seenCitationIds: Set<number>;
+}) {
   return (
     <div className="space-y-4 rounded-lg border border-border/50 bg-white/60 p-5">
       <p className="font-serif text-lg leading-8 text-foreground/90">{proposition.text}</p>
       <div className="space-y-4">
-        {proposition.citations.map((source, index) => (
-          <CitationCard key={`${source.source_id}-${index}`} source={source} />
-        ))}
+        {proposition.citations.map((source, index) => {
+          const alreadyShown = seenCitationIds.has(source.source_id);
+          seenCitationIds.add(source.source_id);
+          return alreadyShown ? (
+            <div
+              key={`${source.source_id}-${index}`}
+              className="rounded-md border border-border/50 bg-secondary/10 px-4 py-3 text-xs text-muted-foreground"
+            >
+              See cited passage above ·{" "}
+              {source.page_number ? `Page ${source.page_number}` : "source page not recorded"}
+            </div>
+          ) : (
+            <CitationCard key={`${source.source_id}-${index}`} source={source} />
+          );
+        })}
       </div>
     </div>
   );
@@ -289,32 +309,97 @@ export default function Home() {
                 </div>
               </div>
 
+              {(result.version_warning || result.date_warning) && (
+                <Alert className="border-amber-300 bg-amber-50 text-amber-950">
+                  <AlertTriangle className="h-4 w-4" />
+                  <AlertTitle>Version and effective-date notice</AlertTitle>
+                  <AlertDescription className="space-y-1">
+                    {result.version_warning && <p>{result.version_warning}</p>}
+                    {result.date_warning && <p>{result.date_warning}</p>}
+                  </AlertDescription>
+                </Alert>
+              )}
+
+              <Card className="border-primary/15 bg-primary/[0.04] shadow-sm">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-xs font-semibold uppercase tracking-widest text-primary">
+                    Bottom line
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="font-serif text-xl leading-8 text-foreground/90">
+                  {result.summary}
+                </CardContent>
+              </Card>
+
               <div className="space-y-7">
-                {result.subanswers.map((subanswer, index) => (
+                {(() => {
+                  const seenCitationIds = new Set<number>();
+                  return result.subanswers.map((subanswer, index) => (
                   <section key={`${subanswer.question}-${index}`} className="space-y-4">
                     {result.subanswers.length > 1 && (
                       <h4 className="font-sans text-sm font-semibold uppercase tracking-wider text-muted-foreground">
                         {subanswer.question}
                       </h4>
                     )}
-                    {subanswer.no_provision ? (
+                    {subanswer.support_status === "not_established" && (
                       <Alert className="border-amber-300 bg-amber-50 text-amber-950">
                         <AlertTriangle className="h-4 w-4" />
-                        <AlertTitle>No provision located</AlertTitle>
-                        <AlertDescription>{subanswer.answer}</AlertDescription>
+                        <AlertTitle>Support not established</AlertTitle>
+                        <AlertDescription>
+                          {subanswer.support_note ??
+                            "The retrieved rule did not establish the applied conclusion."}
+                        </AlertDescription>
                       </Alert>
-                    ) : (
-                      <div className="space-y-4">
+                    )}
+                    {(subanswer.support_status === "no_responsive_provision" ||
+                      subanswer.support_status === "retrieval_empty") && (
+                      <Alert className="border-amber-300 bg-amber-50 text-amber-950">
+                        <AlertTriangle className="h-4 w-4" />
+                        <AlertTitle>Retrieval found no responsive provision</AlertTitle>
+                        <AlertDescription>{subanswer.support_note}</AlertDescription>
+                      </Alert>
+                    )}
+                    {subanswer.applied_conclusion && (
+                      <section className="space-y-2">
+                        <h5 className="font-sans text-xs font-semibold uppercase tracking-widest text-primary">
+                          Applied conclusion
+                        </h5>
+                        <Proposition
+                          proposition={subanswer.applied_conclusion}
+                          seenCitationIds={seenCitationIds}
+                        />
+                      </section>
+                    )}
+                    {subanswer.rejected_citations.length > 0 && (
+                      <section className="space-y-2">
+                        <h5 className="font-sans text-xs font-semibold uppercase tracking-widest text-amber-800">
+                          Retrieved evidence reviewed
+                        </h5>
+                        {subanswer.rejected_citations.map((source, sourceIndex) => (
+                          <CitationCard
+                            key={`rejected-${source.source_id}-${sourceIndex}`}
+                            source={source}
+                          />
+                        ))}
+                      </section>
+                    )}
+                    {subanswer.propositions.length > 0 && (
+                      <section className="space-y-2">
+                        <h5 className="font-sans text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+                          Supporting SOP provisions
+                        </h5>
                         {subanswer.propositions.map((proposition, propositionIndex) => (
                           <Proposition
                             key={`${subanswer.question}-${propositionIndex}`}
                             proposition={proposition}
+                            seenCitationIds={seenCitationIds}
                           />
                         ))}
-                      </div>
+                      </section>
                     )}
                   </section>
-                ))}
+                  ));
+                })()}
               </div>
 
               {result.other_issues.length > 0 && (
@@ -326,7 +411,11 @@ export default function Home() {
                     </h3>
                   </div>
                   {result.other_issues.map((issue, index) => (
-                    <Proposition key={`other-issue-${index}`} proposition={issue} />
+                    <Proposition
+                      key={`other-issue-${index}`}
+                      proposition={issue}
+                      seenCitationIds={new Set<number>()}
+                    />
                   ))}
                 </section>
               )}
