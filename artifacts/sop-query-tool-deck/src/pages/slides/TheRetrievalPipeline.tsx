@@ -17,41 +17,34 @@ export default function TheRetrievalPipeline() {
           <h2 className="m-0 font-light text-[3.6vw] tracking-[0.05em]">THE RETRIEVAL PIPELINE</h2>
           <div className="mt-[1.7vh] h-px w-[13vw] bg-white/45" />
         </div>
-        <div className="mt-[5vh] flex flex-1 items-center gap-[1.2vw]">
-          <div className="flex h-[35vh] flex-1 flex-col justify-between border border-white/35 bg-white/[0.04] p-[1.8vw]">
-            <div className="font-mono text-[1.3vw] text-[#BAE6FD]">01 / INGEST</div>
-            <div>
-              <div className="text-[2vw] font-semibold">DOCX</div>
-              <p className="mt-[1vh] text-[1.15vw] leading-[1.45] text-white/70">DOCX headings become section-aware chunks</p>
-            </div>
+        <div className="mt-[4vh] grid flex-1 grid-cols-2 gap-[1.5vw]">
+          <div className="border border-white/35 bg-white/[0.04] p-[1.5vw]">
+            <div className="font-mono text-[1.2vw] text-[#BAE6FD]">01 / INGEST</div>
+            <div className="mt-[1.5vh] text-[1.9vw] font-semibold">DOCX chunks</div>
+            <p className="mt-[1vh] text-[1.6vw] leading-[1.35] text-white/75">DOCX content is split into section-aware chunks</p>
           </div>
-          <div className="font-mono text-[2vw] text-[#BAE6FD]">→</div>
-          <div className="flex h-[35vh] flex-1 flex-col justify-between border border-white/35 bg-white/[0.04] p-[1.8vw]">
-            <div className="font-mono text-[1.3vw] text-[#BAE6FD]">02 / EMBED</div>
-            <div>
-              <div className="text-[2vw] font-semibold">VECTOR</div>
-              <p className="mt-[1vh] text-[1.15vw] leading-[1.45] text-white/70">OpenAI text-embedding-3-small represents each chunk and question</p>
-            </div>
+          <div className="border border-white/35 bg-white/[0.04] p-[1.5vw]">
+            <div className="font-mono text-[1.2vw] text-[#BAE6FD]">02 / EMBED</div>
+            <div className="mt-[1.5vh] text-[1.9vw] font-semibold">Vector representation</div>
+            <p className="mt-[1vh] text-[1.6vw] leading-[1.35] text-white/75">text-embedding-3-small converts chunks and questions into vectors</p>
           </div>
-          <div className="font-mono text-[2vw] text-[#BAE6FD]">→</div>
-          <div className="flex h-[35vh] flex-1 flex-col justify-between border border-white/35 bg-white/[0.04] p-[1.8vw]">
-            <div className="font-mono text-[1.3vw] text-[#BAE6FD]">03 / RANK</div>
-            <div>
-              <div className="text-[2vw] font-semibold">PGVECTOR</div>
-              <p className="mt-[1vh] text-[1.15vw] leading-[1.45] text-white/70">PostgreSQL + pgvector ranks matches by cosine similarity</p>
-            </div>
+          <div className="border border-white/35 bg-white/[0.04] p-[1.5vw]">
+            <div className="font-mono text-[1.2vw] text-[#BAE6FD]">03 / RANK</div>
+            <div className="mt-[1.5vh] text-[1.9vw] font-semibold">PostgreSQL + pgvector</div>
+            <p className="mt-[1vh] text-[1.6vw] leading-[1.35] text-white/75">PostgreSQL + pgvector ranks matches by cosine similarity</p>
           </div>
-          <div className="font-mono text-[2vw] text-[#BAE6FD]">→</div>
-          <div className="flex h-[35vh] flex-1 flex-col justify-between border border-white/35 bg-white/[0.04] p-[1.8vw]">
-            <div className="font-mono text-[1.3vw] text-[#BAE6FD]">04 / ANSWER</div>
-            <div>
-              <div className="text-[2vw] font-semibold">CLAUDE</div>
-              <p className="mt-[1vh] text-[1.15vw] leading-[1.45] text-white/70">Claude composes a constrained answer from delimited context</p>
-            </div>
+          <div className="border border-white/35 bg-white/[0.04] p-[1.5vw]">
+            <div className="font-mono text-[1.2vw] text-[#BAE6FD]">04 / ANSWER</div>
+            <div className="mt-[1.5vh] text-[1.9vw] font-semibold">Claude context</div>
+            <p className="mt-[1vh] text-[1.6vw] leading-[1.35] text-white/75">Claude answers from retrieved context only</p>
           </div>
-        </div>
-        <div className="border-t border-white/20 pt-[2vh] text-[1.15vw] text-white/70">
-          The API returns answer text plus grounded source excerpts
+          <div className="col-span-2 border border-white/35 bg-white/[0.04] p-[1.5vw]">
+            <div className="flex items-baseline gap-[2vw]">
+              <div className="font-mono text-[1.2vw] text-[#BAE6FD]">05 / RETURN</div>
+              <div className="text-[1.9vw] font-semibold">API excerpts</div>
+            </div>
+            <p className="mt-[1vh] text-[1.6vw] leading-[1.35] text-white/75">The API returns answers with grounded source excerpts</p>
+          </div>
         </div>
         <div className="mt-[1.5vh] flex justify-between font-mono text-[0.85vw] text-white/55">
           <span>SOP QUERY TOOL / RETRIEVAL SYSTEM</span>

@@ -75,7 +75,8 @@ function chartRows(chart: ImportedChartModel) {
       (sum: number, value) => sum + Math.abs(value ?? 0),
       0,
     );
-    const scale = percent && total > 0 ? 100 / total : 1;
+    const normalizedTotal = total ?? 0;
+    const scale = percent && normalizedTotal > 0 ? 100 / normalizedTotal : 1;
 
     return {
       category,

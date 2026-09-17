@@ -23,14 +23,14 @@ export default function IngestionControls() {
               <div className="mt-[0.8vh] text-[1.2vw] text-white/70">chunks / database rows: 0</div>
             </div>
           </div>
-          <div className="flex flex-1 flex-col justify-center gap-[2.2vh]">
+          <div className="flex flex-1 flex-col justify-center gap-[1.7vh]">
             <div className="border-l-2 border-[#BAE6FD] pl-[1.7vw]">
               <div className="font-mono text-[1.2vw] text-[#BAE6FD]">PREVIEW</div>
-              <div className="mt-[0.7vh] text-[1.65vw]">Preview mode prints section references and chunk text</div>
+              <div className="mt-[0.7vh] text-[1.65vw]">Preview-only mode prints section references and chunk text</div>
             </div>
             <div className="border-l-2 border-[#BAE6FD] pl-[1.7vw]">
               <div className="font-mono text-[1.2vw] text-[#BAE6FD]">NO WRITE</div>
-              <div className="mt-[0.7vh] text-[1.65vw]">Preview mode never requests embeddings or writes rows</div>
+              <div className="mt-[0.7vh] text-[1.65vw]">No embeddings or database writes happen during preview</div>
             </div>
             <div className="border-l-2 border-[#BAE6FD] pl-[1.7vw]">
               <div className="font-mono text-[1.2vw] text-[#BAE6FD]">APPROVAL</div>
@@ -38,7 +38,11 @@ export default function IngestionControls() {
             </div>
             <div className="border-l-2 border-[#BAE6FD] pl-[1.7vw]">
               <div className="font-mono text-[1.2vw] text-[#BAE6FD]">RESILIENCE</div>
-              <div className="mt-[0.7vh] text-[1.65vw]">Batches, retries, progress, and safe reruns are built in</div>
+              <div className="mt-[0.7vh] text-[1.65vw]">Batching, retries, progress tracking, and safe reruns protect the full pass</div>
+            </div>
+            <div className="border-l-2 border-[#BAE6FD] pl-[1.7vw]">
+              <div className="font-mono text-[1.2vw] text-[#BAE6FD]">PREVIEW STATUS</div>
+              <div className="mt-[0.7vh] text-[1.65vw]">Current document preview: 422 chunks; database rows: 0</div>
             </div>
           </div>
         </div>

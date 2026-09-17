@@ -22,12 +22,15 @@ export default function ReadyForTheSop() {
           </div>
           <h2 className="m-0 font-light text-[4.5vw] tracking-[0.08em]">READY FOR THE SOP</h2>
           <div className="my-[3vh] h-px w-[12vw] bg-white/50" />
-          <p className="max-w-[46vw] text-[1.25vw] font-light leading-[1.6] text-white/70">
-            React frontend and Flask API are running. PostgreSQL pgvector schema and IVFFLAT index are initialized. The uploaded SOP is awaiting explicit ingestion approval.
-          </p>
-          <div className="mt-[4vh] border border-white/40 bg-white/[0.08] px-[3vw] py-[1.7vh]">
-            <div className="font-mono text-[0.85vw] uppercase tracking-[0.2em] text-white/55">Next step</div>
-            <div className="mt-[0.8vh] text-[1.3vw]">Review the preview, then approve the embedding pass</div>
+          <div className="mt-[1vh] grid w-[64vw] grid-cols-2 gap-[1.3vw] text-left">
+            <div className="border border-white/35 bg-white/[0.04] px-[1.5vw] py-[1.2vh] text-[1.45vw]">React frontend and Flask API are running</div>
+            <div className="border border-white/35 bg-white/[0.04] px-[1.5vw] py-[1.2vh] text-[1.45vw]">PostgreSQL pgvector schema and IVFFLAT index are initialized</div>
+            <div className="border border-white/35 bg-white/[0.04] px-[1.5vw] py-[1.2vh] text-[1.45vw]">OpenAI and Anthropic secrets are configured</div>
+            <div className="border border-white/35 bg-white/[0.04] px-[1.5vw] py-[1.2vh] text-[1.45vw]">The uploaded SOP is pending explicit ingestion approval</div>
+            <div className="col-span-2 border border-white/40 bg-white/[0.08] px-[1.5vw] py-[1.2vh] text-[1.45vw]">
+              <span className="font-mono text-[1.1vw] uppercase tracking-[0.15em] text-[#BAE6FD]">Next step: </span>
+              Review the preview, then approve the embedding pass
+            </div>
           </div>
         </div>
         <div className="flex justify-between border-t border-white/20 pt-[1.5vh] font-mono text-[0.85vw] text-white/55">
