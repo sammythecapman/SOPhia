@@ -1,0 +1,1 @@
+- [SOP chunk deduplication](sop-chunk-deduplication.md) — use a compact content hash for uniqueness; full-text B-tree keys exceed PostgreSQL’s index-entry limit.

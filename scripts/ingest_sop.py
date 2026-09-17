@@ -130,7 +130,7 @@ def ingest(chunks: list[dict[str, str]], version: str) -> None:
                         INSERT INTO sop_chunks
                             (sop_version, section_ref, chunk_text, embedding)
                         VALUES (%s, %s, %s, %s)
-                        ON CONFLICT (sop_version, section_ref, chunk_text)
+                        ON CONFLICT (sop_version, section_ref, chunk_hash)
                         DO UPDATE SET embedding = EXCLUDED.embedding
                         """,
                         (version, item["section_ref"], item["chunk_text"], embedding),
