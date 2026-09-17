@@ -8,9 +8,12 @@
 
 export * from './apiError';
 export * from './healthStatus';
+export * from './sopGuarantorRow';
+export * from './sopGuarantorRowStatus';
 export * from './sopProposition';
 export * from './sopQueryResult';
 export * from './sopQuestion';
 export * from './sopSource';
+export * from './sopSourceApplicabilityStatus';
 export * from './sopSubanswer';
 export * from './sopSubanswerSupportStatus';

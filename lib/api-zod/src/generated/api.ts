@@ -51,11 +51,13 @@ export const QuerySopResponse = zod.object({
   "page_number": zod.number().int().nullable(),
   "quote_located": zod.boolean(),
   "supports_conclusion": zod.boolean(),
+  "applicability_status": zod.enum(['applicable', 'not_applicable']),
+  "applicability_reason": zod.string().nullable(),
   "verified": zod.boolean()
 }))
 }),zod.null()]),
   "no_provision": zod.boolean(),
-  "support_status": zod.enum(['supported', 'not_established', 'no_responsive_provision', 'retrieval_empty']),
+  "support_status": zod.enum(['supported', 'not_established', 'not_applicable', 'no_responsive_provision', 'retrieval_empty']),
   "support_note": zod.string().nullable(),
   "searched_terms": zod.array(zod.string()),
   "rejected_citations": zod.array(zod.object({
@@ -68,6 +70,8 @@ export const QuerySopResponse = zod.object({
   "page_number": zod.number().int().nullable(),
   "quote_located": zod.boolean(),
   "supports_conclusion": zod.boolean(),
+  "applicability_status": zod.enum(['applicable', 'not_applicable']),
+  "applicability_reason": zod.string().nullable(),
   "verified": zod.boolean()
 })),
   "propositions": zod.array(zod.object({
@@ -83,6 +87,32 @@ export const QuerySopResponse = zod.object({
   "page_number": zod.number().int().nullable(),
   "quote_located": zod.boolean(),
   "supports_conclusion": zod.boolean(),
+  "applicability_status": zod.enum(['applicable', 'not_applicable']),
+  "applicability_reason": zod.string().nullable(),
+  "verified": zod.boolean()
+}))
+})),
+  "guarantor_rows": zod.array(zod.object({
+  "party": zod.string(),
+  "capacity": zod.string(),
+  "ownership_percentage": zod.number().nullable(),
+  "ownership_comparison": zod.string().nullable(),
+  "guaranty_type": zod.string(),
+  "triggering_provision": zod.string(),
+  "additional_conditions": zod.string(),
+  "status": zod.enum(['required', 'unresolved']),
+  "citations": zod.array(zod.object({
+  "source_id": zod.number().int(),
+  "section_ref": zod.string(),
+  "quote": zod.string(),
+  "source_chunk": zod.string(),
+  "source_version": zod.string(),
+  "effective_date": zod.string(),
+  "page_number": zod.number().int().nullable(),
+  "quote_located": zod.boolean(),
+  "supports_conclusion": zod.boolean(),
+  "applicability_status": zod.enum(['applicable', 'not_applicable']),
+  "applicability_reason": zod.string().nullable(),
   "verified": zod.boolean()
 }))
 }))
@@ -100,6 +130,8 @@ export const QuerySopResponse = zod.object({
   "page_number": zod.number().int().nullable(),
   "quote_located": zod.boolean(),
   "supports_conclusion": zod.boolean(),
+  "applicability_status": zod.enum(['applicable', 'not_applicable']),
+  "applicability_reason": zod.string().nullable(),
   "verified": zod.boolean()
 }))
 })),
@@ -113,6 +145,8 @@ export const QuerySopResponse = zod.object({
   "page_number": zod.number().int().nullable(),
   "quote_located": zod.boolean(),
   "supports_conclusion": zod.boolean(),
+  "applicability_status": zod.enum(['applicable', 'not_applicable']),
+  "applicability_reason": zod.string().nullable(),
   "verified": zod.boolean()
 }))
 })

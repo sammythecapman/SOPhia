@@ -160,5 +160,76 @@
     "expected_facts": ["September 20, 2026", "8.1"],
     "unsupported": false,
     "expect_date_warning": true
+  },
+  {
+    "id": "applicability-negative-full-change",
+    "question": "An ordinary 7(a) full change of ownership is funded with a seller note. The seller exits and retains no ownership. Which guaranty and seller-note rules apply?",
+    "expected_sections": ["Guaranties", "Personal Guaranties"],
+    "expected_facts": ["seller note", "guaranty"],
+    "unsupported": false,
+    "forbidden_supported_sections": [
+      "Loans to Employee Stock Ownership Plans (ESOPs)",
+      "Partial Changes of Ownership"
+    ],
+    "expect_not_applicable": true
+  },
+  {
+    "id": "applicability-positive-esop-retained-seller",
+    "question": "An ESOP buys a controlling interest and the seller retains 15 percent. What guaranty must the retained seller provide?",
+    "expected_sections": ["Loans to Employee Stock Ownership Plans (ESOPs)", "Types of Changes of Ownership"],
+    "expected_facts": ["15%", "full", "guarantee"],
+    "unsupported": false,
+    "expect_guarantor_rows": [
+      {"party": "seller", "capacity": "selling owner", "status": "required"}
+    ]
+  },
+  {
+    "id": "applicability-near-miss-partial-change",
+    "question": "A partial change of ownership, not an ESOP, leaves the seller with 25 percent. Which guaranty provisions apply to the retained seller?",
+    "expected_sections": ["Types of Changes of Ownership", "Personal Guaranties"],
+    "expected_facts": ["25%", "guaranty"],
+    "unsupported": false,
+    "forbidden_supported_sections": ["Loans to Employee Stock Ownership Plans (ESOPs)"],
+    "expect_not_applicable": true,
+    "expect_guarantor_rows": [
+      {"party": "seller", "capacity": "selling owner", "status": "required"}
+    ]
+  },
+  {
+    "id": "guarantor-enumeration-robs",
+    "question": "A ROBS-funded 7(a) borrower closes in January 2027. The retirement plan holds 68 percent and the individual holds 32 percent directly; the individual is plan sponsor, sole plan participant, and trustee. List every required guarantor and the capacity in which each signs.",
+    "expected_sections": ["401(k) Plans Including Rollovers as Business Start-ups (ROBS) Plans", "Guaranties"],
+    "expected_facts": ["68%", "32%", "plan sponsor", "trustee"],
+    "unsupported": false,
+    "expect_guarantor_rows": [
+      {"party": "individual", "capacity": "direct owner", "status": "required"},
+      {"party": "individual", "capacity": "plan sponsor", "status": "required"},
+      {"party": "plan", "capacity": "entity owner", "status": "required"}
+    ],
+    "expect_arithmetic": true
+  },
+  {
+    "id": "guarantor-enumeration-threshold",
+    "question": "A $2.4MM 7(a) change of ownership closes in November 2026. Post-sale ownership is buyer 45 percent, buyer's spouse 19 percent, and a key employee 36 percent. Enumerate every guarantor row and state the comparison to the 20 percent threshold.",
+    "expected_sections": ["Guaranties", "Personal Guaranties"],
+    "expected_facts": ["45%", "19%", "36%", "20%"],
+    "unsupported": false,
+    "expect_guarantor_rows": [
+      {"party": "buyer", "capacity": "direct owner", "status": "required"},
+      {"party": "key employee", "capacity": "direct owner", "status": "required"},
+      {"party": "spouse", "capacity": "direct owner with spousal attribution", "status": "required"}
+    ],
+    "expect_arithmetic": true
+  },
+  {
+    "id": "guarantor-enumeration-unresolved",
+    "question": "A 7(a) change of ownership has an entity owner at 17 percent, and the retrieved guaranty text does not state whether that entity must sign. List the guarantor rows and identify what remains unresolved.",
+    "expected_sections": ["Guaranties"],
+    "expected_facts": ["17%", "unresolved"],
+    "unsupported": false,
+    "expect_guarantor_rows": [
+      {"party": "party identified", "capacity": "unresolved guarantor capacity", "status": "unresolved"}
+    ],
+    "expect_unresolved_guarantor": true
   }
 ]

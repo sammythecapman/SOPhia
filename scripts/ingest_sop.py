@@ -15,6 +15,7 @@ from docx import Document
 from openai import OpenAI
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "artifacts" / "api-server"))
+from applicability import APPLICABILITY_DIMENSIONS, classify_text  # noqa: E402
 from db import connection  # noqa: E402
 
 MODEL = "text-embedding-3-small"
@@ -124,13 +125,13 @@ def extract_chunks(path: Path) -> list[dict[str, str]]:
         if text:
             ref = " > ".join(heading_stack) or "Document introduction"
             for part in split_text(text):
-                output.append(
-                    {
-                        "section_ref": ref,
-                        "chunk_text": part,
-                        "page_number": page_for_heading(heading_stack, toc_pages),
-                    }
-                )
+                item = {
+                    "section_ref": ref,
+                    "chunk_text": part,
+                    "page_number": page_for_heading(heading_stack, toc_pages),
+                }
+                item.update(classify_text(part, ref))
+                output.append(item)
         body = []
 
     for paragraph in document.paragraphs:
@@ -187,8 +188,10 @@ def ingest(chunks: list[dict[str, str]], version: str, effective_date: str | Non
                     conn.execute(
                         """
                         INSERT INTO sop_chunks
-                            (sop_version, section_ref, chunk_text, effective_date, page_number, embedding)
-                        VALUES (%s, %s, %s, %s, %s, %s)
+                            (sop_version, section_ref, chunk_text, effective_date, page_number,
+                             transaction_types, entity_structures, party_roles, program_scopes,
+                             embedding)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                         ON CONFLICT (sop_version, section_ref, chunk_hash)
                         DO UPDATE SET embedding = EXCLUDED.embedding
                         """,
@@ -198,6 +201,10 @@ def ingest(chunks: list[dict[str, str]], version: str, effective_date: str | Non
                             item["chunk_text"],
                             effective_date,
                             item["page_number"],
+                            item["transaction_types"],
+                            item["entity_structures"],
+                            item["party_roles"],
+                            item["program_scopes"],
                             embedding,
                         ),
                     )

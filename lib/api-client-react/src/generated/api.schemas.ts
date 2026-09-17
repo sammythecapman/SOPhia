@@ -17,6 +17,14 @@ export interface SopQuestion {
   question: string;
 }
 
+export type SopSourceApplicabilityStatus = typeof SopSourceApplicabilityStatus[keyof typeof SopSourceApplicabilityStatus];
+
+
+export const SopSourceApplicabilityStatus = {
+  applicable: 'applicable',
+  not_applicable: 'not_applicable',
+} as const;
+
 export interface SopSource {
   source_id: number;
   section_ref: string;
@@ -28,6 +36,9 @@ export interface SopSource {
   page_number: number | null;
   quote_located: boolean;
   supports_conclusion: boolean;
+  applicability_status: SopSourceApplicabilityStatus;
+  /** @nullable */
+  applicability_reason: string | null;
   verified: boolean;
 }
 
@@ -37,12 +48,35 @@ export interface SopProposition {
   citations: SopSource[];
 }
 
+export type SopGuarantorRowStatus = typeof SopGuarantorRowStatus[keyof typeof SopGuarantorRowStatus];
+
+
+export const SopGuarantorRowStatus = {
+  required: 'required',
+  unresolved: 'unresolved',
+} as const;
+
+export interface SopGuarantorRow {
+  party: string;
+  capacity: string;
+  /** @nullable */
+  ownership_percentage: number | null;
+  /** @nullable */
+  ownership_comparison: string | null;
+  guaranty_type: string;
+  triggering_provision: string;
+  additional_conditions: string;
+  status: SopGuarantorRowStatus;
+  citations: SopSource[];
+}
+
 export type SopSubanswerSupportStatus = typeof SopSubanswerSupportStatus[keyof typeof SopSubanswerSupportStatus];
 
 
 export const SopSubanswerSupportStatus = {
   supported: 'supported',
   not_established: 'not_established',
+  not_applicable: 'not_applicable',
   no_responsive_provision: 'no_responsive_provision',
   retrieval_empty: 'retrieval_empty',
 } as const;
@@ -58,6 +92,7 @@ export interface SopSubanswer {
   searched_terms: string[];
   rejected_citations: SopSource[];
   propositions: SopProposition[];
+  guarantor_rows: SopGuarantorRow[];
 }
 
 export interface SopQueryResult {

@@ -95,6 +95,11 @@ components:
           type: boolean
         supports_conclusion:
           type: boolean
+        applicability_status:
+          type: string
+          enum: [applicable, not_applicable]
+        applicability_reason:
+          type: [string, "null"]
         verified:
           type: boolean
       required:
@@ -107,6 +112,8 @@ components:
         - page_number
         - quote_located
         - supports_conclusion
+        - applicability_status
+        - applicability_reason
         - verified
     SopProposition:
       type: object
@@ -120,6 +127,40 @@ components:
           items:
             $ref: "#/components/schemas/SopSource"
       required: [text, arithmetic_valid, citations]
+    SopGuarantorRow:
+      type: object
+      properties:
+        party:
+          type: string
+        capacity:
+          type: string
+        ownership_percentage:
+          type: [number, "null"]
+        ownership_comparison:
+          type: [string, "null"]
+        guaranty_type:
+          type: string
+        triggering_provision:
+          type: string
+        additional_conditions:
+          type: string
+        status:
+          type: string
+          enum: [required, unresolved]
+        citations:
+          type: array
+          items:
+            $ref: "#/components/schemas/SopSource"
+      required:
+        - party
+        - capacity
+        - ownership_percentage
+        - ownership_comparison
+        - guaranty_type
+        - triggering_provision
+        - additional_conditions
+        - status
+        - citations
     SopSubanswer:
       type: object
       properties:
@@ -135,7 +176,7 @@ components:
           type: boolean
         support_status:
           type: string
-          enum: [supported, not_established, no_responsive_provision, retrieval_empty]
+          enum: [supported, not_established, not_applicable, no_responsive_provision, retrieval_empty]
         support_note:
           type: [string, "null"]
         searched_terms:
@@ -150,6 +191,10 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/SopProposition"
+        guarantor_rows:
+          type: array
+          items:
+            $ref: "#/components/schemas/SopGuarantorRow"
       required:
         - question
         - answer
@@ -160,6 +205,7 @@ components:
         - searched_terms
         - rejected_citations
         - propositions
+        - guarantor_rows
     SopQueryResult:
       type: object
       properties:

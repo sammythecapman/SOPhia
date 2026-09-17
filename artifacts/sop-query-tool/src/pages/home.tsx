@@ -1,6 +1,10 @@
 import { useState } from "react";
 import { useQuerySop } from "@workspace/api-client-react";
-import type { SopProposition, SopSource } from "@workspace/api-client-react";
+import type {
+  SopGuarantorRow,
+  SopProposition,
+  SopSource,
+} from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -75,7 +79,15 @@ function CitationCard({ source }: { source: SopSource }) {
               <CheckCircle2 className="h-3 w-3" />
               Quote located in source
             </Badge>
-            {source.supports_conclusion ? (
+            {source.applicability_status === "not_applicable" ? (
+              <Badge
+                variant="outline"
+                className="gap-1 border-rose-300 bg-rose-50 text-[10px] font-semibold uppercase tracking-wider text-rose-800"
+              >
+                <AlertTriangle className="h-3 w-3" />
+                Not applicable
+              </Badge>
+            ) : source.supports_conclusion ? (
               <Badge
                 variant="outline"
                 className="gap-1 border-primary/30 bg-primary/5 text-[10px] font-semibold uppercase tracking-wider text-primary"
@@ -115,6 +127,11 @@ function CitationCard({ source }: { source: SopSource }) {
             <span>{context.after}</span>
           </div>
         </details>
+        {source.applicability_reason && (
+          <p className="rounded-md border border-rose-200 bg-rose-50 px-4 py-3 text-xs leading-relaxed text-rose-900">
+            {source.applicability_reason}
+          </p>
+        )}
       </CardContent>
     </Card>
   );
@@ -147,6 +164,81 @@ function Proposition({
           );
         })}
       </div>
+    </div>
+  );
+}
+
+function GuarantorTable({
+  rows,
+  seenCitationIds,
+}: {
+  rows: SopGuarantorRow[];
+  seenCitationIds: Set<number>;
+}) {
+  return (
+    <div className="overflow-x-auto rounded-lg border border-border/60 bg-white/70">
+      <table className="w-full min-w-[920px] border-collapse text-left text-sm">
+        <thead className="bg-secondary/30 text-[10px] uppercase tracking-widest text-muted-foreground">
+          <tr>
+            <th className="px-4 py-3 font-semibold">Party</th>
+            <th className="px-4 py-3 font-semibold">Capacity</th>
+            <th className="px-4 py-3 font-semibold">Ownership</th>
+            <th className="px-4 py-3 font-semibold">Guaranty</th>
+            <th className="px-4 py-3 font-semibold">Triggering provision</th>
+            <th className="px-4 py-3 font-semibold">Additional conditions</th>
+            <th className="px-4 py-3 font-semibold">Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row, index) => (
+            <tr key={`${row.party}-${row.capacity}-${index}`} className="border-t border-border/50 align-top">
+              <td className="px-4 py-4 font-semibold text-primary">{row.party}</td>
+              <td className="px-4 py-4 text-foreground/80">{row.capacity}</td>
+              <td className="px-4 py-4 text-foreground/80">
+                {row.ownership_percentage == null
+                  ? "Not stated"
+                  : `${row.ownership_percentage}%`}
+                {row.ownership_comparison && (
+                  <div className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                    {row.ownership_comparison}
+                  </div>
+                )}
+              </td>
+              <td className="px-4 py-4 font-medium text-foreground/90">{row.guaranty_type}</td>
+              <td className="px-4 py-4 text-foreground/80">{row.triggering_provision}</td>
+              <td className="px-4 py-4 text-foreground/80">{row.additional_conditions}</td>
+              <td className="px-4 py-4">
+                <Badge
+                  variant="outline"
+                  className={
+                    row.status === "required"
+                      ? "border-emerald-700/30 bg-emerald-50 text-[10px] font-semibold uppercase tracking-wider text-emerald-800"
+                      : "border-amber-300 bg-amber-50 text-[10px] font-semibold uppercase tracking-wider text-amber-800"
+                  }
+                >
+                  {row.status === "required" ? "Required" : "Unresolved"}
+                </Badge>
+                <div className="mt-3 space-y-2">
+                  {row.citations.map((source, citationIndex) => {
+                    const alreadyShown = seenCitationIds.has(source.source_id);
+                    seenCitationIds.add(source.source_id);
+                    return alreadyShown ? (
+                      <div
+                        key={`${source.source_id}-${citationIndex}`}
+                        className="text-[11px] text-muted-foreground"
+                      >
+                        See cited passage above
+                      </div>
+                    ) : (
+                      <CitationCard key={`${source.source_id}-${citationIndex}`} source={source} />
+                    );
+                  })}
+                </div>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }
@@ -351,6 +443,16 @@ export default function Home() {
                         </AlertDescription>
                       </Alert>
                     )}
+                    {subanswer.support_status === "not_applicable" && (
+                      <Alert className="border-rose-300 bg-rose-50 text-rose-950">
+                        <AlertTriangle className="h-4 w-4" />
+                        <AlertTitle>Provision not applicable to this transaction type</AlertTitle>
+                        <AlertDescription>
+                          {subanswer.support_note ??
+                            "The retrieved provision governs a different transaction or fact pattern."}
+                        </AlertDescription>
+                      </Alert>
+                    )}
                     {(subanswer.support_status === "no_responsive_provision" ||
                       subanswer.support_status === "retrieval_empty") && (
                       <Alert className="border-amber-300 bg-amber-50 text-amber-950">
@@ -370,10 +472,21 @@ export default function Home() {
                         />
                       </section>
                     )}
+                    {subanswer.guarantor_rows.length > 0 && (
+                      <section className="space-y-2">
+                        <h5 className="font-sans text-xs font-semibold uppercase tracking-widest text-primary">
+                          Guarantors by party and capacity
+                        </h5>
+                        <GuarantorTable
+                          rows={subanswer.guarantor_rows}
+                          seenCitationIds={seenCitationIds}
+                        />
+                      </section>
+                    )}
                     {subanswer.rejected_citations.length > 0 && (
                       <section className="space-y-2">
                         <h5 className="font-sans text-xs font-semibold uppercase tracking-widest text-amber-800">
-                          Retrieved evidence reviewed
+                          Retrieved evidence reviewed and rejected
                         </h5>
                         {subanswer.rejected_citations.map((source, sourceIndex) => (
                           <CitationCard

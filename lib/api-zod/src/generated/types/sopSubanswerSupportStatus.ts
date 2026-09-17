@@ -12,6 +12,7 @@ export type SopSubanswerSupportStatus = typeof SopSubanswerSupportStatus[keyof t
 export const SopSubanswerSupportStatus = {
   supported: 'supported',
   not_established: 'not_established',
+  not_applicable: 'not_applicable',
   no_responsive_provision: 'no_responsive_provision',
   retrieval_empty: 'retrieval_empty',
 } as const;

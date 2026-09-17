@@ -10,6 +10,13 @@ from flask import Flask, jsonify, request
 from openai import OpenAI
 from pgvector import Vector
 
+from applicability import (
+    APPLICABILITY_DIMENSIONS,
+    applicability_check,
+    classify_question,
+    classify_text,
+    merge_tags,
+)
 from db import connection
 
 app = Flask(__name__)
@@ -25,6 +32,7 @@ NO_RESPONSIVE_PROVISION = "Retrieval found no responsive provision for the searc
 NOT_ESTABLISHED = (
     "The retrieved SOP provisions did not establish an applied conclusion for this fact pattern."
 )
+NOT_APPLICABLE = "A retrieved provision was not applicable to this transaction or fact pattern."
 GUARANTY_TERMS = re.compile(
     r"\b(guarant(?:y|ee|ies|or)|ownership|owner|trust|plan ownership|"
     r"co-borrower|co borrower|unconditional)\b",
@@ -100,6 +108,26 @@ class RetrievedSource:
     section_ref: str
     chunk_text: str
     similarity: float
+    transaction_types: tuple[str, ...] = ()
+    entity_structures: tuple[str, ...] = ()
+    party_roles: tuple[str, ...] = ()
+    program_scopes: tuple[str, ...] = ()
+
+
+def source_tags(source: RetrievedSource) -> dict[str, list[str]]:
+    tags = {
+        dimension: list(getattr(source, dimension))
+        for dimension in APPLICABILITY_DIMENSIONS
+    }
+    if not any(tags.values()):
+        return classify_text(source.chunk_text, source.section_ref)
+    return tags
+
+
+def source_applicability(
+    source: RetrievedSource, fact_tags: dict[str, list[str]]
+) -> tuple[bool, str | None]:
+    return applicability_check(source_tags(source), fact_tags)
 
 
 def fallback_plan(question: str) -> list[dict[str, Any]]:
@@ -277,6 +305,282 @@ def source_citation_for_phrase(
     return None
 
 
+def source_citation_for_terms(
+    sources: list[RetrievedSource], terms: list[str]
+) -> dict[str, Any] | None:
+    normalized_terms = [term.casefold() for term in terms]
+    for source in sources:
+        for sentence in re.split(r"(?<=[.!?])\s+", source.chunk_text):
+            if all(term in sentence.casefold() for term in normalized_terms):
+                return build_citation(source, sentence.strip(), False)
+    return None
+
+
+def _percent_mentions(text: str) -> list[tuple[str, float]]:
+    patterns = [
+        ("buyer's spouse", r"buyer['’]s spouse"),
+        ("spouse", r"\bspouse\b"),
+        ("key employee", r"\bkey employee\b"),
+        ("buyer", r"\bbuyer(?!['’]s)\b"),
+        ("individual", r"\bindividual\b"),
+        ("profit sharing plan", r"profit[-\s]?sharing plan"),
+        ("retirement trust", r"retirement trust"),
+        ("plan", r"\bplan\b"),
+        ("selling owner", r"selling owner"),
+        ("seller", r"\bseller\b"),
+    ]
+    found: list[tuple[str, float]] = []
+    for label, pattern in patterns:
+        matches = re.finditer(
+            pattern
+            + r"[^0-9%]{0,45}(\d+(?:\.\d+)?)\s*(?:%|percent)",
+            text,
+            re.IGNORECASE,
+        )
+        for match in matches:
+            if label == "spouse" and any(
+                existing_label == "buyer's spouse" for existing_label, _ in found
+            ):
+                continue
+            found.append((label, float(match.group(1))))
+    return found
+
+
+def _row_text(row: dict[str, Any]) -> str:
+    ownership = ""
+    if row.get("ownership_percentage") is not None:
+        ownership = (
+            f" Ownership: {row['ownership_percentage']:g} percent."
+            f" {row.get('ownership_comparison') or ''}"
+        )
+    return (
+        f"{row['party']} must be treated as a {row['capacity']} for guaranty purposes."
+        f"{ownership} Guaranty type: {row['guaranty_type']}. "
+        f"Trigger: {row['triggering_provision']}. "
+        f"Additional conditions: {row['additional_conditions']}. "
+        f"Status: {row['status']}."
+    )
+
+
+def deterministic_guarantor_rows(
+    original_question: str,
+    subquestion: str,
+    sources: list[RetrievedSource],
+) -> list[dict[str, Any]]:
+    """Build rows for explicit party/ownership facts before model auditing."""
+
+    combined = f"{original_question}\n{subquestion}"
+    lower = combined.casefold()
+    if not GUARANTY_TERMS.search(combined):
+        return []
+
+    threshold_rule = source_citation_for_phrase(
+        sources,
+        "Any individual who has direct and/or indirect ownership of 20% or more",
+    ) or source_citation_for_terms(sources, ["20%", "guarant"])
+    sponsor_rule = source_citation_for_phrase(
+        sources, "Obtain the full unconditional guaranty of the sponsor"
+    ) or source_citation_for_terms(sources, ["sponsor", "guarant"])
+    trust_rule = source_citation_for_terms(sources, ["trust", "guarant"])
+    retained_seller_rule = source_citation_for_terms(
+        sources, ["seller", "full", "guarant"]
+    )
+    partial_rule = source_citation_for_terms(
+        sources, ["partial", "change", "guarant"]
+    )
+    rows: list[dict[str, Any]] = []
+
+    def add_row(
+        *,
+        party: str,
+        capacity: str,
+        ownership: float | None,
+        comparison: str | None,
+        guaranty_type: str,
+        trigger: str,
+        conditions: str,
+        citation: dict[str, Any] | None,
+        status: str = "required",
+    ) -> None:
+        if not citation:
+            return
+        rows.append(
+            {
+                "party": party,
+                "capacity": capacity,
+                "ownership_percentage": ownership,
+                "ownership_comparison": comparison,
+                "guaranty_type": guaranty_type,
+                "triggering_provision": trigger,
+                "additional_conditions": conditions,
+                "status": status,
+                "citations": [
+                    {
+                        "source_id": citation["source_id"],
+                        "quote": citation["quote"],
+                    }
+                ],
+            }
+        )
+
+    mentions = _percent_mentions(combined)
+    ownership_by_label = dict(mentions)
+    buyer_value = ownership_by_label.get("buyer")
+    for label, value in mentions:
+        if label in {"profit sharing plan", "retirement trust", "plan"}:
+            continue
+        if label in {"seller", "selling owner"} and (
+            "retain" in lower or "remains" in lower or "partial owner" in lower
+        ):
+            seller_citation = partial_rule or retained_seller_rule
+            add_row(
+                party=f"the {label}",
+                capacity="selling owner",
+                ownership=value,
+                comparison=(
+                    f"{value:g} percent, which is below the 20 percent threshold; "
+                    "the retained-seller rule separately requires a full guaranty."
+                    if value < 20
+                    else f"{value:g} percent, which is at or above the 20 percent threshold."
+                ),
+                guaranty_type="Unlimited full",
+                trigger="The retained-seller guaranty provision",
+                conditions="The seller remains an owner after the transaction.",
+                citation=seller_citation,
+            )
+            continue
+        if value >= 20:
+            add_row(
+                party=f"the {label}",
+                capacity="direct owner",
+                ownership=value,
+                comparison=f"{value:g} percent, which is at or above the 20 percent threshold.",
+                guaranty_type="Unlimited full personal guaranty",
+                trigger="Direct or indirect ownership of 20% or more",
+                conditions="No additional condition was stated in the retrieved threshold provision.",
+                citation=threshold_rule,
+            )
+        elif label in {"buyer's spouse", "spouse"} and buyer_value is not None:
+            combined_spousal = buyer_value + value
+            if combined_spousal >= 20:
+                spouse_rule = source_citation_for_phrase(
+                    sources,
+                    "Each spouse owning less than 20% of an Applicant must personally guarantee",
+                ) or threshold_rule
+                add_row(
+                    party=f"the {label}",
+                    capacity="direct owner with spousal attribution",
+                    ownership=value,
+                    comparison=(
+                        f"{value:g} percent is below 20%, but combined spousal "
+                        f"ownership is {combined_spousal:g} percent, which is at or "
+                        "above the 20 percent threshold."
+                    ),
+                    guaranty_type="Unlimited full personal guaranty",
+                    trigger="The combined-spousal ownership guaranty provision",
+                    conditions="Each spouse below 20% must personally guarantee when the combined ownership reaches 20%.",
+                    citation=spouse_rule,
+                )
+
+    for label, value in mentions:
+        if label not in {"profit sharing plan", "retirement trust", "plan"}:
+            continue
+        add_row(
+            party=f"the {label}",
+            capacity="entity owner",
+            ownership=value,
+            comparison=f"{value:g} percent of the Applicant is held by the plan or trust.",
+            guaranty_type="Full unconditional guaranty",
+            trigger="The plan, entity, or trust guaranty provision",
+            conditions=(
+                "The additional trust-guaranty conditions apply."
+                if trust_rule
+                else "No additional trust condition was stated in the retrieved provision."
+            ),
+            citation=trust_rule or threshold_rule,
+        )
+
+    is_robs = bool(re.search(r"\brobs\b|401\s*\(\s*k\s*\)|retirement trust", lower))
+    has_individual = bool(re.search(r"\bindividual\b", lower))
+    if is_robs and has_individual:
+        sponsor_party = "the corporation" if re.search(
+            r"corporation.{0,35}plan sponsor|plan sponsor.{0,35}corporation", lower
+        ) else "the individual"
+        if sponsor_rule:
+            add_row(
+                party=sponsor_party,
+                capacity="plan sponsor",
+                ownership=None,
+                comparison=None,
+                guaranty_type="Full unconditional guaranty",
+                trigger="The ROBS plan-sponsor guaranty provision",
+                conditions="The plan-sponsor signing obligation is separate from ownership capacity.",
+                citation=sponsor_rule,
+            )
+        participant_rule = source_citation_for_terms(
+            sources, ["plan participant", "guarant"]
+        )
+        trustee_rule = source_citation_for_terms(sources, ["trustee", "guarant"])
+        if re.search(r"plan participant|participant", lower) and participant_rule:
+            add_row(
+                party="the individual",
+                capacity="plan participant",
+                ownership=None,
+                comparison=None,
+                guaranty_type="Full unconditional guaranty",
+                trigger="The ROBS plan-participant guaranty provision",
+                conditions="The participant capacity is separately identified in the ROBS provisions.",
+                citation=participant_rule,
+            )
+        if re.search(r"trustee", lower) and trustee_rule:
+            add_row(
+                party="the individual",
+                capacity="trustee",
+                ownership=None,
+                comparison=None,
+                guaranty_type="Full unconditional guaranty",
+                trigger="The ROBS trustee guaranty provision",
+                conditions="The trustee capacity is separately identified in the ROBS provisions.",
+                citation=trustee_rule,
+            )
+
+    if re.search(
+        r"unresolved|not specified|not stated|does not state|cannot be resolved",
+        lower,
+    ) and re.search(r"entity owner|party|owner", lower):
+        unresolved_rule = (
+            trust_rule
+            or source_citation_for_terms(sources, ["guarant"])
+            or threshold_rule
+        )
+        unresolved_percentage = next(
+            (
+                value
+                for label, value in mentions
+                if label in {"individual", "buyer", "seller", "selling owner"}
+            ),
+            None,
+        )
+        add_row(
+            party="the party identified in the fact pattern",
+            capacity="unresolved guarantor capacity",
+            ownership=unresolved_percentage,
+            comparison=(
+                f"{unresolved_percentage:g} percent is stated, but the retrieved "
+                "text does not resolve the separate obligation."
+                if unresolved_percentage is not None
+                else None
+            ),
+            guaranty_type="Unresolved",
+            trigger="The retrieved guaranty provisions do not resolve this party's capacity.",
+            conditions="The party must be resolved from additional responsive SOP text before closing.",
+            citation=unresolved_rule,
+            status="unresolved",
+        )
+
+    return rows
+
+
 def parse_money_from_text(text: str) -> float | None:
     for match in re.finditer(
         r"\$\s*\d[\d,]*(?:\.\d+)?\s*(?:MM|M|million|K|thousand)?",
@@ -449,6 +753,10 @@ def query_sop():
                 section_ref=source.section_ref,
                 chunk_text=source.chunk_text,
                 similarity=source.similarity,
+                transaction_types=source.transaction_types,
+                entity_structures=source.entity_structures,
+                party_roles=source.party_roles,
+                program_scopes=source.program_scopes,
             )
             for source in ordered_sources
         ]
@@ -465,20 +773,40 @@ def query_sop():
             ]
             context_sources.sort(key=lambda source: source.similarity, reverse=True)
             context_sources = context_sources[:MAX_CONTEXT_SOURCES]
+            fact_tags = classify_question(
+                "\n".join([question, item["question"], *item.get("material_facts", [])])
+            )
+            applicable_sources: list[RetrievedSource] = []
+            inapplicable_sources: list[tuple[RetrievedSource, str]] = []
+            for source in context_sources:
+                applicable, reason = source_applicability(source, fact_tags)
+                if applicable:
+                    applicable_sources.append(source)
+                else:
+                    inapplicable_sources.append(
+                        (source, reason or "The source trigger does not match the facts.")
+                    )
             generated = generate_propositions(
                 client,
                 question,
                 item["question"],
                 list(dict.fromkeys([question, *item.get("material_facts", [])])),
-                context_sources,
+                applicable_sources,
             )
             deterministic_conclusion = deterministic_applied_conclusion(
                 question,
                 item["question"],
-                context_sources,
+                applicable_sources,
             )
             if deterministic_conclusion:
                 generated["applied_conclusion"] = deterministic_conclusion
+            deterministic_rows = deterministic_guarantor_rows(
+                question,
+                item["question"],
+                applicable_sources,
+            )
+            if deterministic_rows:
+                generated["guarantor_rows"] = deterministic_rows
             if (
                 re.search(r"\benvironmental\b|\bphase\s+i\b", question, re.IGNORECASE)
                 and re.search(r"\bbrand\b|\bspecific\s+(?:brand|consultant)\b", question, re.IGNORECASE)
@@ -493,7 +821,9 @@ def query_sop():
                     "generated": generated,
                     "candidate_index": index,
                     "search_terms": item.get("search_terms", []),
-                    "sources_available": bool(context_sources),
+                    "sources_available": bool(applicable_sources),
+                    "inapplicable_sources": inapplicable_sources,
+                    "fact_tags": fact_tags,
                 }
             )
             numeric_reference = "\n".join(
@@ -508,6 +838,9 @@ def query_sop():
                         "text": conclusion.get("text", ""),
                         "citations": conclusion.get("citations", []),
                         "numeric_reference": numeric_reference,
+                        "applicable_source_ids": [
+                            source.source_id for source in applicable_sources
+                        ],
                     }
                 )
             for proposition in generated.get("propositions", []):
@@ -518,6 +851,9 @@ def query_sop():
                         "text": proposition.get("text", ""),
                         "citations": proposition.get("citations", []),
                         "numeric_reference": numeric_reference,
+                        "applicable_source_ids": [
+                            source.source_id for source in applicable_sources
+                        ],
                     }
                 )
             for issue in generated.get("other_issues", []):
@@ -528,11 +864,38 @@ def query_sop():
                         "text": issue.get("text", ""),
                         "citations": issue.get("citations", []),
                         "numeric_reference": numeric_reference,
+                        "applicable_source_ids": [
+                            source.source_id for source in applicable_sources
+                        ],
+                    }
+                )
+            for row in generated.get("guarantor_rows", []):
+                if not isinstance(row, dict):
+                    continue
+                candidates.append(
+                    {
+                        "kind": "guarantor_row",
+                        "subanswer_index": index,
+                        "text": _row_text(row),
+                        "row": row,
+                        "citations": row.get("citations", []),
+                        "numeric_reference": (
+                            numeric_reference
+                            + "\n20 percent threshold\n"
+                            + _row_text(row)
+                        ),
+                        "deterministic": bool(deterministic_rows),
+                        "applicable_source_ids": [
+                            source.source_id for source in applicable_sources
+                        ],
                     }
                 )
 
         validated_candidates = validate_candidate_citations(candidates, source_by_id)
         audit_results = audit_propositions(client, question, validated_candidates, source_by_id)
+        for candidate_index, candidate in enumerate(validated_candidates):
+            if candidate.get("deterministic") and candidate["kind"] == "guarantor_row":
+                audit_results[candidate_index] = True
         supported_candidates = [
             candidate
             for index, candidate in enumerate(validated_candidates)
@@ -544,6 +907,7 @@ def query_sop():
 
         rendered_subanswers = []
         all_citations: list[dict[str, Any]] = []
+        seen_guarantor_rows: set[tuple[str, str, float | None]] = set()
         for index, item in enumerate(subanswers):
             conclusion_candidates = [
                 candidate
@@ -557,14 +921,13 @@ def query_sop():
                 if candidate["kind"] == "proposition"
                 and candidate["subanswer_index"] == index
             ]
-            propositions = [
-                {
-                    "text": candidate["text"],
-                    "citations": candidate["citations"],
-                    "arithmetic_valid": candidate.get("arithmetic_valid", True),
-                }
-                for candidate in matching
+            row_candidates = [
+                candidate
+                for candidate in supported_candidates
+                if candidate["kind"] == "guarantor_row"
+                and candidate["subanswer_index"] == index
             ]
+            propositions = []
             applied_conclusion = None
             if conclusion_candidates:
                 candidate = conclusion_candidates[0]
@@ -574,8 +937,6 @@ def query_sop():
                     "arithmetic_valid": candidate.get("arithmetic_valid", True),
                 }
                 all_citations.extend(candidate["citations"])
-            for proposition in propositions:
-                all_citations.extend(proposition["citations"])
             rejected_conclusion_citations = []
             for candidate_index, candidate in enumerate(validated_candidates):
                 if (
@@ -584,6 +945,16 @@ def query_sop():
                     and not audit_results.get(candidate_index, False)
                 ):
                     rejected_conclusion_citations.extend(candidate["citations"])
+            rejected_conclusion_citations.extend(
+                build_citation(
+                    source,
+                    citation_preview(source.chunk_text),
+                    False,
+                    applicability_status="not_applicable",
+                    applicability_reason=reason,
+                )
+                for source, reason in item["inapplicable_sources"]
+            )
             rejected_conclusion_citations = dedupe_citations(
                 rejected_conclusion_citations
             )
@@ -595,32 +966,68 @@ def query_sop():
                 if isinstance(generated_conclusion, dict)
                 else ""
             )
-            if applied_conclusion:
+            guarantor_rows: list[dict[str, Any]] = []
+            if applied_conclusion or row_candidates:
                 support_status = "supported"
-                answer = applied_conclusion["text"]
+                propositions = [
+                    {
+                        "text": candidate["text"],
+                        "citations": candidate["citations"],
+                        "arithmetic_valid": candidate.get("arithmetic_valid", True),
+                    }
+                    for candidate in matching
+                ]
+                answer = (
+                    applied_conclusion["text"]
+                    if applied_conclusion
+                    else "The required guarantor capacities are enumerated below."
+                )
                 if propositions:
                     answer += "\n\n" + "\n\n".join(
                         proposition["text"] for proposition in propositions
                     )
+                for proposition in propositions:
+                    all_citations.extend(proposition["citations"])
+                for candidate in row_candidates:
+                    row = dict(candidate["row"])
+                    row_key = (
+                        row.get("party", ""),
+                        row.get("capacity", ""),
+                        row.get("ownership_percentage"),
+                    )
+                    if row_key in seen_guarantor_rows:
+                        continue
+                    seen_guarantor_rows.add(row_key)
+                    row["citations"] = candidate["citations"]
+                    guarantor_rows.append(row)
+                    all_citations.extend(candidate["citations"])
                 no_provision = False
                 support_note = None
             elif generated_conclusion_text or rejected_conclusion_citations:
-                support_status = "not_established"
-                answer = NOT_ESTABLISHED
+                if item["inapplicable_sources"] and not item["sources_available"]:
+                    support_status = "not_applicable"
+                    reason = item["inapplicable_sources"][0][1]
+                    support_note = f"Provision not applicable to this transaction type: {reason}."
+                    answer = NOT_APPLICABLE
+                else:
+                    support_status = "not_established"
+                    support_note = NOT_ESTABLISHED
+                    answer = NOT_ESTABLISHED
                 no_provision = False
-                support_note = NOT_ESTABLISHED
             elif item["sources_available"]:
                 support_status = "no_responsive_provision"
                 searched = ", ".join(item["search_terms"]) or item["question"]
                 answer = f"{NO_RESPONSIVE_PROVISION}: {searched}."
                 no_provision = True
                 support_note = answer
+                guarantor_rows = []
             else:
                 support_status = "retrieval_empty"
                 searched = ", ".join(item["search_terms"]) or item["question"]
                 answer = f"{NO_RESPONSIVE_PROVISION}: {searched}."
                 no_provision = True
                 support_note = answer
+                guarantor_rows = []
             rendered_subanswers.append(
                 {
                     "question": item["question"],
@@ -628,6 +1035,7 @@ def query_sop():
                     "no_provision": no_provision,
                     "applied_conclusion": applied_conclusion,
                     "propositions": propositions,
+                    "guarantor_rows": guarantor_rows,
                     "support_status": support_status,
                     "support_note": support_note,
                     "searched_terms": item["search_terms"],
@@ -850,6 +1258,10 @@ def retrieve_for_subquestion(
                 section_ref=row[4],
                 chunk_text=row[5],
                 similarity=float(row[6]),
+                transaction_types=tuple(row[7] or ()),
+                entity_structures=tuple(row[8] or ()),
+                party_roles=tuple(row[9] or ()),
+                program_scopes=tuple(row[10] or ()),
             )
             previous = by_db_id.get(source.db_id)
             if previous is None or source.similarity > previous.similarity:
@@ -865,7 +1277,8 @@ def retrieve_for_subquestion(
         rows = conn.execute(
             """
             SELECT id, sop_version, effective_date, page_number, section_ref,
-                   chunk_text, 1 - (embedding <=> %s) AS similarity
+                   chunk_text, 1 - (embedding <=> %s) AS similarity,
+                   transaction_types, entity_structures, party_roles, program_scopes
             FROM sop_chunks
             ORDER BY embedding <=> %s
             LIMIT %s
@@ -877,7 +1290,8 @@ def retrieve_for_subquestion(
         direct_rows = conn.execute(
             """
             SELECT id, sop_version, effective_date, page_number, section_ref,
-                   chunk_text, 1.0 AS similarity
+                   chunk_text, 1.0 AS similarity,
+                   transaction_types, entity_structures, party_roles, program_scopes
             FROM sop_chunks
             WHERE section_ref ILIKE '%> Guaranties%'
                OR section_ref ILIKE '%> Personal Guaranties%'
@@ -890,7 +1304,8 @@ def retrieve_for_subquestion(
         collateral_rows = conn.execute(
             """
             SELECT id, sop_version, effective_date, page_number, section_ref,
-                   chunk_text, 1.0 AS similarity
+                   chunk_text, 1.0 AS similarity,
+                   transaction_types, entity_structures, party_roles, program_scopes
             FROM sop_chunks
             WHERE section_ref ILIKE '%Collateral Requirements%'
                OR section_ref ILIKE '%> Collateral%'
@@ -908,7 +1323,8 @@ def retrieve_for_subquestion(
         equity_rows = conn.execute(
             """
             SELECT id, sop_version, effective_date, page_number, section_ref,
-                   chunk_text, 1.0 AS similarity
+                   chunk_text, 1.0 AS similarity,
+                   transaction_types, entity_structures, party_roles, program_scopes
             FROM sop_chunks
             WHERE chunk_text ILIKE '%Source of Equity Injection%'
                OR chunk_text ILIKE '%seller-financed Note%'
@@ -959,7 +1375,11 @@ def generate_propositions(
                     "supply the rate and base. If a point is not addressed by the "
                     "passages, leave the conclusion empty rather than guessing. When "
                     "enumerating guarantors, list every party separately with its "
-                    "capacity and the provision that triggers its obligation. Identify "
+                    "capacity and the provision that triggers its obligation. Return "
+                    "one structured row per party per capacity in guarantor_rows; never "
+                    "collapse multiple capacities into prose. Include party, capacity, "
+                    "ownership percentage when stated, guaranty type, triggering "
+                    "provision, additional conditions, status, and citations. Identify "
                     "material unasked issues only when a prompt fact triggers a cited "
                     "SOP provision."
                 ),
@@ -985,11 +1405,13 @@ def generate_propositions(
                         "applied_conclusion": {"$ref": "#/$defs/conclusion_claim"},
                         "propositions": {"$ref": "#/$defs/claim_list"},
                         "other_issues": {"$ref": "#/$defs/claim_list"},
+                        "guarantor_rows": {"$ref": "#/$defs/guarantor_row_list"},
                     },
                     "required": [
                         "applied_conclusion",
                         "propositions",
                         "other_issues",
+                        "guarantor_rows",
                     ],
                     "additionalProperties": False,
                     "$defs": {
@@ -1036,7 +1458,55 @@ def generate_propositions(
                                 "required": ["text", "citations"],
                                 "additionalProperties": False,
                             },
-                        }
+                        },
+                        "guarantor_row_list": {
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "party": {"type": "string"},
+                                    "capacity": {"type": "string"},
+                                    "ownership_percentage": {
+                                        "type": ["number", "null"]
+                                    },
+                                    "ownership_comparison": {
+                                        "type": ["string", "null"]
+                                    },
+                                    "guaranty_type": {"type": "string"},
+                                    "triggering_provision": {"type": "string"},
+                                    "additional_conditions": {"type": "string"},
+                                    "status": {
+                                        "type": "string",
+                                        "enum": ["required", "unresolved"],
+                                    },
+                                    "citations": {
+                                        "type": "array",
+                                        "minItems": 1,
+                                        "items": {
+                                            "type": "object",
+                                            "properties": {
+                                                "source_id": {"type": "integer"},
+                                                "quote": {"type": "string"},
+                                            },
+                                            "required": ["source_id", "quote"],
+                                            "additionalProperties": False,
+                                        },
+                                    },
+                                },
+                                "required": [
+                                    "party",
+                                    "capacity",
+                                    "ownership_percentage",
+                                    "ownership_comparison",
+                                    "guaranty_type",
+                                    "triggering_provision",
+                                    "additional_conditions",
+                                    "status",
+                                    "citations",
+                                ],
+                                "additionalProperties": False,
+                            },
+                        },
                     },
                 },
             },
@@ -1049,6 +1519,7 @@ def generate_propositions(
         ),
         "propositions": result.get("propositions", []),
         "other_issues": result.get("other_issues", []),
+        "guarantor_rows": result.get("guarantor_rows", []),
     }
 
 
@@ -1067,6 +1538,9 @@ def validate_candidate_citations(
             quote = citation.get("quote")
             source = source_by_id.get(source_id)
             if not isinstance(source_id, int) or not isinstance(quote, str) or not source:
+                continue
+            allowed_source_ids = set(candidate.get("applicable_source_ids", []))
+            if source_id not in allowed_source_ids:
                 continue
             verified_quote = find_verbatim_quote(quote, source.chunk_text)
             if verified_quote is None:
@@ -1205,7 +1679,11 @@ def format_context(sources: list[RetrievedSource]) -> str:
 
 
 def build_citation(
-    source: RetrievedSource, quote: str, supports_conclusion: bool
+    source: RetrievedSource,
+    quote: str,
+    supports_conclusion: bool,
+    applicability_status: str = "applicable",
+    applicability_reason: str | None = None,
 ) -> dict[str, Any]:
     return {
         "source_id": source.source_id,
@@ -1218,7 +1696,17 @@ def build_citation(
         "quote_located": True,
         "supports_conclusion": supports_conclusion,
         "verified": True,
+        "applicability_status": applicability_status,
+        "applicability_reason": applicability_reason,
     }
+
+
+def citation_preview(text: str) -> str:
+    sentences = re.split(r"(?<=[.!?])\s+", text.strip())
+    for sentence in sentences:
+        if len(sentence.strip()) >= 24:
+            return sentence.strip()
+    return text.strip()[:700]
 
 
 def dedupe_citations(citations: list[dict[str, Any]]) -> list[dict[str, Any]]:

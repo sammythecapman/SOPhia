@@ -5,6 +5,7 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+import type { SopGuarantorRow } from './sopGuarantorRow';
 import type { SopProposition } from './sopProposition';
 import type { SopSource } from './sopSource';
 import type { SopSubanswerSupportStatus } from './sopSubanswerSupportStatus';
@@ -20,4 +21,5 @@ export interface SopSubanswer {
   searched_terms: string[];
   rejected_citations: SopSource[];
   propositions: SopProposition[];
+  guarantor_rows: SopGuarantorRow[];
 }

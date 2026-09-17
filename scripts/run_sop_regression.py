@@ -38,6 +38,8 @@ def main() -> int:
     arithmetic_failures = 0
     negative_audit_failures = 0
     date_warning_failures = 0
+    applicability_failures = 0
+    guarantor_row_failures = 0
 
     for case in cases:
         result = query(args.base_url, case["question"])
@@ -100,6 +102,39 @@ def main() -> int:
         date_warning_failure = case.get("expect_date_warning", False) and not result.get(
             "date_warning"
         )
+        all_rows = [
+            row
+            for subanswer in result.get("subanswers", [])
+            for row in subanswer.get("guarantor_rows", [])
+        ]
+        expected_rows = case.get("expect_guarantor_rows", [])
+        row_failure = any(
+            not any(
+                expected.get("party", "").casefold() in row.get("party", "").casefold()
+                and expected.get("capacity", "").casefold()
+                in row.get("capacity", "").casefold()
+                and (
+                    not expected.get("status")
+                    or expected["status"] == row.get("status")
+                )
+                for row in all_rows
+            )
+            for expected in expected_rows
+        )
+        unresolved_failure = case.get("expect_unresolved_guarantor", False) and not any(
+            row.get("status") == "unresolved" for row in all_rows
+        )
+        applicability_failure = case.get("expect_not_applicable", False) and not (
+            any(
+                subanswer.get("support_status") == "not_applicable"
+                for subanswer in result.get("subanswers", [])
+            )
+            or any(
+                citation.get("applicability_status") == "not_applicable"
+                for subanswer in result.get("subanswers", [])
+                for citation in subanswer.get("rejected_citations", [])
+            )
+        )
 
         phantom_citations += int(phantom)
         citation_failures += int(citation_failure)
@@ -109,6 +144,8 @@ def main() -> int:
         arithmetic_failures += int(arithmetic_failure)
         negative_audit_failures += int(negative_audit_failure or forbidden_section_failure)
         date_warning_failures += int(date_warning_failure)
+        applicability_failures += int(applicability_failure)
+        guarantor_row_failures += int(row_failure or unresolved_failure)
         status = "PASS" if not any(
             (
                 phantom,
@@ -120,6 +157,9 @@ def main() -> int:
                 negative_audit_failure,
                 forbidden_section_failure,
                 date_warning_failure,
+                applicability_failure,
+                row_failure,
+                unresolved_failure,
             )
         ) else "FAIL"
         print(
@@ -128,7 +168,8 @@ def main() -> int:
             f"support_signal={signal_failure} section={section_failure} "
             f"unsupported={unsupported_failure} arithmetic={arithmetic_failure} "
             f"negative_audit={negative_audit_failure or forbidden_section_failure} "
-            f"date_warning={date_warning_failure}"
+            f"date_warning={date_warning_failure} applicability={applicability_failure} "
+            f"guarantor_rows={row_failure or unresolved_failure}"
         )
 
     print(
@@ -143,6 +184,8 @@ def main() -> int:
                 "arithmetic_failures": arithmetic_failures,
                 "negative_audit_failures": negative_audit_failures,
                 "date_warning_failures": date_warning_failures,
+                "applicability_failures": applicability_failures,
+                "guarantor_row_failures": guarantor_row_failures,
             },
             indent=2,
         )
@@ -158,6 +201,8 @@ def main() -> int:
                 arithmetic_failures,
                 negative_audit_failures,
                 date_warning_failures,
+                applicability_failures,
+                guarantor_row_failures,
             )
         )
     )

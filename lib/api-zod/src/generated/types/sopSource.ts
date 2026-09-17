@@ -5,6 +5,7 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+import type { SopSourceApplicabilityStatus } from './sopSourceApplicabilityStatus';
 
 export interface SopSource {
   source_id: number;
@@ -17,5 +18,8 @@ export interface SopSource {
   page_number: number | null;
   quote_located: boolean;
   supports_conclusion: boolean;
+  applicability_status: SopSourceApplicabilityStatus;
+  /** @nullable */
+  applicability_reason: string | null;
   verified: boolean;
 }
