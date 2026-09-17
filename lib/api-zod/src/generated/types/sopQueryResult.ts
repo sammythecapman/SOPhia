@@ -5,9 +5,15 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+import type { SopProposition } from './sopProposition';
 import type { SopSource } from './sopSource';
+import type { SopSubanswer } from './sopSubanswer';
 
 export interface SopQueryResult {
   answer: string;
+  source_version: string;
+  effective_date: string;
+  subanswers: SopSubanswer[];
+  other_issues: SopProposition[];
   sources: SopSource[];
 }

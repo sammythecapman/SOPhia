@@ -7,8 +7,15 @@
  */
 
 export interface SopSource {
+  source_id: number;
   section_ref: string;
   quote: string;
   source_chunk: string;
+  source_version: string;
+  effective_date: string;
+  /** @nullable */
+  page_number: number | null;
+  quote_located: boolean;
+  supports_conclusion: boolean;
   verified: boolean;
 }

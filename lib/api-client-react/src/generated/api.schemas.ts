@@ -18,14 +18,37 @@ export interface SopQuestion {
 }
 
 export interface SopSource {
+  source_id: number;
   section_ref: string;
   quote: string;
   source_chunk: string;
+  source_version: string;
+  effective_date: string;
+  /** @nullable */
+  page_number: number | null;
+  quote_located: boolean;
+  supports_conclusion: boolean;
   verified: boolean;
+}
+
+export interface SopProposition {
+  text: string;
+  citations: SopSource[];
+}
+
+export interface SopSubanswer {
+  question: string;
+  answer: string;
+  no_provision: boolean;
+  propositions: SopProposition[];
 }
 
 export interface SopQueryResult {
   answer: string;
+  source_version: string;
+  effective_date: string;
+  subanswers: SopSubanswer[];
+  other_issues: SopProposition[];
   sources: SopSource[];
 }
 

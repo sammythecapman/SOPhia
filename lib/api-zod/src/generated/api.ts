@@ -30,10 +30,53 @@ export const QuerySopBody = zod.object({
 
 export const QuerySopResponse = zod.object({
   "answer": zod.string(),
-  "sources": zod.array(zod.object({
+  "source_version": zod.string(),
+  "effective_date": zod.string(),
+  "subanswers": zod.array(zod.object({
+  "question": zod.string(),
+  "answer": zod.string(),
+  "no_provision": zod.boolean(),
+  "propositions": zod.array(zod.object({
+  "text": zod.string(),
+  "citations": zod.array(zod.object({
+  "source_id": zod.number().int(),
   "section_ref": zod.string(),
   "quote": zod.string(),
   "source_chunk": zod.string(),
+  "source_version": zod.string(),
+  "effective_date": zod.string(),
+  "page_number": zod.number().int().nullable(),
+  "quote_located": zod.boolean(),
+  "supports_conclusion": zod.boolean(),
+  "verified": zod.boolean()
+}))
+}))
+})),
+  "other_issues": zod.array(zod.object({
+  "text": zod.string(),
+  "citations": zod.array(zod.object({
+  "source_id": zod.number().int(),
+  "section_ref": zod.string(),
+  "quote": zod.string(),
+  "source_chunk": zod.string(),
+  "source_version": zod.string(),
+  "effective_date": zod.string(),
+  "page_number": zod.number().int().nullable(),
+  "quote_located": zod.boolean(),
+  "supports_conclusion": zod.boolean(),
+  "verified": zod.boolean()
+}))
+})),
+  "sources": zod.array(zod.object({
+  "source_id": zod.number().int(),
+  "section_ref": zod.string(),
+  "quote": zod.string(),
+  "source_chunk": zod.string(),
+  "source_version": zod.string(),
+  "effective_date": zod.string(),
+  "page_number": zod.number().int().nullable(),
+  "quote_located": zod.boolean(),
+  "supports_conclusion": zod.boolean(),
   "verified": zod.boolean()
 }))
 })

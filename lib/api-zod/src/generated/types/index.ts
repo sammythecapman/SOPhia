@@ -8,6 +8,8 @@
 
 export * from './apiError';
 export * from './healthStatus';
+export * from './sopProposition';
 export * from './sopQueryResult';
 export * from './sopQuestion';
 export * from './sopSource';
+export * from './sopSubanswer';

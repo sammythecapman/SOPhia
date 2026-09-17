@@ -2,6 +2,7 @@
 """Preview and, only after explicit approval, ingest SBA SOP 50 10 8."""
 
 import argparse
+import datetime as dt
 import hashlib
 import os
 import random
@@ -20,6 +21,7 @@ MODEL = "text-embedding-3-small"
 MAX_CHARS = 6000
 BATCH_SIZE = 64
 STRUCTURAL_HEADING_RE = re.compile(r"^heading [1-6]$")
+DEFAULT_EFFECTIVE_DATE = "2026-10-01"
 
 
 def find_docx(explicit: str | None) -> Path:
@@ -43,6 +45,56 @@ def is_heading(paragraph) -> bool:
     return bool(text and STRUCTURAL_HEADING_RE.fullmatch(style))
 
 
+def normalize_heading_title(text: str) -> str:
+    value = re.sub(r"\s+", " ", text).strip()
+    return re.sub(r"^[A-Z]\.\s*", "", value)
+
+
+def extract_source_metadata(document: Document) -> tuple[str | None, str | None, dict[str, int]]:
+    version = None
+    effective_date = None
+    toc_pages: dict[str, int] = {}
+    in_toc = False
+
+    for paragraph in document.paragraphs:
+        text = paragraph.text.strip()
+        if not text:
+            continue
+        if "version:" in text.casefold():
+            match = re.search(r"Version:\s*([0-9]+(?:\.[0-9]+)?)", text, re.IGNORECASE)
+            if match:
+                version = f"SOP 50 10 {match.group(1)}"
+        if text.casefold().startswith("effective date:"):
+            raw_date = text.split(":", 1)[1].strip()
+            try:
+                effective_date = dt.datetime.strptime(raw_date, "%B %d, %Y").date().isoformat()
+            except ValueError:
+                effective_date = raw_date
+        if text.casefold() == "table of contents":
+            in_toc = True
+            continue
+        if in_toc and paragraph.style.name.casefold().startswith("toc"):
+            parts = re.split(r"\t+", text)
+            if len(parts) >= 2 and parts[-1].strip().isdigit():
+                title = parts[-2].strip()
+                toc_pages[normalize_heading_title(title)] = int(parts[-1].strip())
+            continue
+        if in_toc and is_heading(paragraph):
+            in_toc = False
+
+    return version, effective_date, toc_pages
+
+
+def page_for_heading(heading_stack: list[str], toc_pages: dict[str, int]) -> int | None:
+    if not heading_stack:
+        return 1
+    for heading in reversed(heading_stack):
+        page = toc_pages.get(normalize_heading_title(heading))
+        if page is not None:
+            return page
+    return None
+
+
 def split_text(text: str) -> list[str]:
     if len(text) <= MAX_CHARS:
         return [text]
@@ -60,6 +112,7 @@ def split_text(text: str) -> list[str]:
 
 def extract_chunks(path: Path) -> list[dict[str, str]]:
     document = Document(path)
+    _, _, toc_pages = extract_source_metadata(document)
     heading_stack: list[str] = []
     body: list[str] = []
     output: list[dict[str, str]] = []
@@ -71,7 +124,13 @@ def extract_chunks(path: Path) -> list[dict[str, str]]:
         if text:
             ref = " > ".join(heading_stack) or "Document introduction"
             for part in split_text(text):
-                output.append({"section_ref": ref, "chunk_text": part})
+                output.append(
+                    {
+                        "section_ref": ref,
+                        "chunk_text": part,
+                        "page_number": page_for_heading(heading_stack, toc_pages),
+                    }
+                )
         body = []
 
     for paragraph in document.paragraphs:
@@ -114,7 +173,7 @@ def embed_with_retry(client: OpenAI, texts: list[str]) -> list[list[float]]:
     raise RuntimeError("Embedding retry loop exhausted")
 
 
-def ingest(chunks: list[dict[str, str]], version: str) -> None:
+def ingest(chunks: list[dict[str, str]], version: str, effective_date: str | None) -> None:
     if not os.getenv("OPENAI_API_KEY") or not os.getenv("DATABASE_URL"):
         raise RuntimeError("OPENAI_API_KEY and DATABASE_URL are required for ingestion.")
     client = OpenAI()
@@ -128,12 +187,19 @@ def ingest(chunks: list[dict[str, str]], version: str) -> None:
                     conn.execute(
                         """
                         INSERT INTO sop_chunks
-                            (sop_version, section_ref, chunk_text, embedding)
-                        VALUES (%s, %s, %s, %s)
+                            (sop_version, section_ref, chunk_text, effective_date, page_number, embedding)
+                        VALUES (%s, %s, %s, %s, %s, %s)
                         ON CONFLICT (sop_version, section_ref, chunk_hash)
                         DO UPDATE SET embedding = EXCLUDED.embedding
                         """,
-                        (version, item["section_ref"], item["chunk_text"], embedding),
+                        (
+                            version,
+                            item["section_ref"],
+                            item["chunk_text"],
+                            effective_date,
+                            item["page_number"],
+                            embedding,
+                        ),
                     )
                     inserted += 1
             print(f"Processed {min(start + BATCH_SIZE, len(chunks))}/{len(chunks)} chunks")
@@ -143,7 +209,8 @@ def ingest(chunks: list[dict[str, str]], version: str) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("path", nargs="?")
-    parser.add_argument("--version", default="SOP 50 10 8")
+    parser.add_argument("--version", default="SOP 50 10 8.1")
+    parser.add_argument("--effective-date", default=DEFAULT_EFFECTIVE_DATE)
     parser.add_argument("--preview-count", type=int, default=8)
     parser.add_argument("--ingest", action="store_true", help="Enable approval prompt and ingestion")
     args = parser.parse_args()
@@ -164,7 +231,7 @@ def main() -> None:
     if confirmation != f"INGEST {args.version}":
         print("Approval not received. No embeddings requested and no rows written.")
         return
-    ingest(chunks, args.version)
+    ingest(chunks, args.version, args.effective_date)
 
 
 if __name__ == "__main__":

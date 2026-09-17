@@ -1,0 +1,100 @@
+[
+  {
+    "id": "robs-equity-injection",
+    "question": "Do funds rolled from a 401(k) plan through a ROBS plan count toward the required equity injection, and what restrictions apply to distributions?",
+    "expected_sections": ["401(k) Plans Including Rollovers as Business Start-ups (ROBS) Plans"],
+    "expected_facts": ["ROBS", "equity injection"],
+    "unsupported": false
+  },
+  {
+    "id": "robs-guarantor",
+    "question": "A retirement trust owns 60% of the Applicant through a ROBS structure. Who must sign the full unconditional guaranty?",
+    "expected_sections": ["Guaranties", "401(k) Plans Including Rollovers as Business Start-ups (ROBS) Plans"],
+    "expected_facts": ["full unconditional guaranty"],
+    "unsupported": false
+  },
+  {
+    "id": "compound-robs",
+    "question": "A corporation is both the Borrower and plan sponsor, while an individual is the plan participant and trustee. Do the ROBS funds satisfy the equity injection, and which person or entity must provide the unconditional guaranty?",
+    "expected_sections": ["401(k) Plans Including Rollovers as Business Start-ups (ROBS) Plans", "Guaranties"],
+    "expected_facts": ["equity injection", "guaranty"],
+    "unsupported": false
+  },
+  {
+    "id": "twenty-percent-guaranty",
+    "question": "What guaranty is required from an individual who owns 20% or more of an Applicant?",
+    "expected_sections": ["Guaranties"],
+    "expected_facts": ["20%", "unlimited full guaranty"],
+    "unsupported": false
+  },
+  {
+    "id": "trust-guaranty",
+    "question": "If a trust provides the guaranty on an SBA loan, what additional requirements apply?",
+    "expected_sections": ["Guaranties"],
+    "expected_facts": ["trust", "guaranty"],
+    "unsupported": false
+  },
+  {
+    "id": "seller-retains-fifteen",
+    "question": "A selling owner retains 15% direct ownership after a change of ownership. What guaranty must that seller provide?",
+    "expected_sections": ["Personal Guaranties", "Types of Changes of Ownership", "Guaranties"],
+    "expected_facts": ["15%", "full guaranty"],
+    "unsupported": false
+  },
+  {
+    "id": "seller-note",
+    "question": "Can a seller-financed note be included in a change-of-ownership equity injection, and what timing rule applies if it is refinanced?",
+    "expected_sections": ["Uses of Proceeds", "Changes of Ownership"],
+    "expected_facts": ["seller-financed Note", "36 months"],
+    "unsupported": false
+  },
+  {
+    "id": "esop-injection",
+    "question": "Are loans to an ESOP for purchasing a controlling interest subject to the equity-injection requirement?",
+    "expected_sections": ["Loans to Employee Stock Ownership Plans (ESOPs)"],
+    "expected_facts": ["not subject to the requirement for equity injection"],
+    "unsupported": false
+  },
+  {
+    "id": "compound-esop",
+    "question": "An ESOP buys a controlling interest and the seller remains a partial owner. Is an equity injection required, and what guarantee must the seller provide?",
+    "expected_sections": ["Loans to Employee Stock Ownership Plans (ESOPs)", "Guaranties"],
+    "expected_facts": ["full, unlimited guarantee"],
+    "unsupported": false
+  },
+  {
+    "id": "partial-change-ownership",
+    "question": "Can a new owner who gains 1% in a partial change of ownership be a Co-Borrower, and what separate guaranty rules apply to the remaining owners?",
+    "expected_sections": ["Types of Changes of Ownership", "Guaranties"],
+    "expected_facts": ["Co-Borrower", "guaranties"],
+    "unsupported": false
+  },
+  {
+    "id": "epc-oc-change",
+    "question": "Can a 7(a) loan finance a partial change of ownership in the Operating Company of an EPC/OC structure?",
+    "expected_sections": ["Changes of Ownership", "Eligible Passive Companies"],
+    "expected_facts": ["Operating Company"],
+    "unsupported": false
+  },
+  {
+    "id": "robs-regulatory-review",
+    "question": "Does SBA review a ROBS plan's compliance with IRS, Treasury, and Department of Labor requirements?",
+    "expected_sections": ["401(k) Plans Including Rollovers as Business Start-ups (ROBS) Plans"],
+    "expected_facts": ["SBA will not review"],
+    "unsupported": false
+  },
+  {
+    "id": "unsupported-weather",
+    "question": "What is the weather forecast for Chicago tomorrow?",
+    "expected_sections": [],
+    "expected_facts": [],
+    "unsupported": true
+  },
+  {
+    "id": "unsupported-state-tax",
+    "question": "What state income-tax filing should the owner make after closing the SBA loan?",
+    "expected_sections": [],
+    "expected_facts": [],
+    "unsupported": true
+  }
+]

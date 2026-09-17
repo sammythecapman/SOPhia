@@ -50,7 +50,7 @@ uv run python scripts/ingest_sop.py path/to/SOP.docx
 Review section references and chunk text. To proceed, rerun:
 
 ```bash
-uv run python scripts/ingest_sop.py --ingest --version "SOP 50 10 8"
+uv run python scripts/ingest_sop.py --ingest --version "SOP 50 10 8.1"
 ```
 
 The script then requires typing the exact displayed approval phrase. It batches
@@ -58,4 +58,9 @@ embeddings, retries transient failures with exponential backoff, reports
 progress, and upserts on `(sop_version, section_ref, chunk_text)` so reruns are
 safe. Approval is never implied by `--ingest`.
 
-No SOP has been ingested as part of project setup.
+The development database contains the approved SOP 50 10 8.1 corpus. The
+regression set in `tests/sop_regression.json` can be run with:
+
+```bash
+uv run python scripts/run_sop_regression.py
+```

@@ -39,7 +39,7 @@ paths:
               $ref: "#/components/schemas/SopQuestion"
       responses:
         "200":
-          description: Grounded answer and cited SOP sources
+          description: Grounded SOP answer with proposition-level citations
           content:
             application/json:
               schema:
@@ -77,25 +77,89 @@ components:
     SopSource:
       type: object
       properties:
+        source_id:
+          type: integer
         section_ref:
           type: string
         quote:
           type: string
         source_chunk:
           type: string
+        source_version:
+          type: string
+        effective_date:
+          type: string
+        page_number:
+          type: [integer, "null"]
+        quote_located:
+          type: boolean
+        supports_conclusion:
+          type: boolean
         verified:
           type: boolean
-      required: [section_ref, quote, source_chunk, verified]
+      required:
+        - source_id
+        - section_ref
+        - quote
+        - source_chunk
+        - source_version
+        - effective_date
+        - page_number
+        - quote_located
+        - supports_conclusion
+        - verified
+    SopProposition:
+      type: object
+      properties:
+        text:
+          type: string
+        citations:
+          type: array
+          items:
+            $ref: "#/components/schemas/SopSource"
+      required: [text, citations]
+    SopSubanswer:
+      type: object
+      properties:
+        question:
+          type: string
+        answer:
+          type: string
+        no_provision:
+          type: boolean
+        propositions:
+          type: array
+          items:
+            $ref: "#/components/schemas/SopProposition"
+      required: [question, answer, no_provision, propositions]
     SopQueryResult:
       type: object
       properties:
         answer:
           type: string
+        source_version:
+          type: string
+        effective_date:
+          type: string
+        subanswers:
+          type: array
+          items:
+            $ref: "#/components/schemas/SopSubanswer"
+        other_issues:
+          type: array
+          items:
+            $ref: "#/components/schemas/SopProposition"
         sources:
           type: array
           items:
             $ref: "#/components/schemas/SopSource"
-      required: [answer, sources]
+      required:
+        - answer
+        - source_version
+        - effective_date
+        - subanswers
+        - other_issues
+        - sources
     ApiError:
       type: object
       properties:
