@@ -1,0 +1,42 @@
+[
+  {
+    "id": "sop-query-tool-title",
+    "position": 1,
+    "filepath": "src/pages/slides/SopQueryTool.tsx",
+    "title": "SOP QUERY TOOL",
+    "description": "A grounded question-answering system for SBA SOP 50 10 8",
+    "speakerNotes": ""
+  },
+  {
+    "id": "sop-query-tool-product",
+    "position": 2,
+    "filepath": "src/pages/slides/TheProduct.tsx",
+    "title": "THE PRODUCT",
+    "description": "The product surface and user experience",
+    "speakerNotes": ""
+  },
+  {
+    "id": "sop-query-tool-pipeline",
+    "position": 3,
+    "filepath": "src/pages/slides/TheRetrievalPipeline.tsx",
+    "title": "THE RETRIEVAL PIPELINE",
+    "description": "How policy questions become grounded answers",
+    "speakerNotes": ""
+  },
+  {
+    "id": "sop-query-tool-ingestion",
+    "position": 4,
+    "filepath": "src/pages/slides/IngestionControls.tsx",
+    "title": "INGESTION CONTROLS",
+    "description": "Preview, approval, and safe ingestion controls",
+    "speakerNotes": ""
+  },
+  {
+    "id": "sop-query-tool-ready",
+    "position": 5,
+    "filepath": "src/pages/slides/ReadyForTheSop.tsx",
+    "title": "READY FOR THE SOP",
+    "description": "Current implementation status and next step",
+    "speakerNotes": ""
+  }
+]

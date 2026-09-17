@@ -1,0 +1,28 @@
+kind = "slides"
+previewPath = "/sop-query-tool-deck/"
+title = "SOP Query Tool Overview"
+description = "A concise Blueprint-themed project overview deck explaining the SOP Query Tool product, retrieval pipeline, ingestion safeguards, and readiness for the SBA SOP 50 10 8 document."
+version = "1.0.0"
+id = "artifacts/sop-query-tool-deck"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/sop-query-tool-deck/" ]
+localPort = 24627
+
+[services.development]
+run = "pnpm --filter @workspace/sop-query-tool-deck run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/sop-query-tool-deck", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/sop-query-tool-deck/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "24627"
+BASE_PATH = "/sop-query-tool-deck/"
