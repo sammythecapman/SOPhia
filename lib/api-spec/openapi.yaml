@@ -10,6 +10,8 @@ servers:
 tags:
   - name: health
     description: Health operations
+  - name: sop
+    description: SOP retrieval operations
 paths:
   /healthz:
     get:
@@ -24,6 +26,36 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+  /sop/query:
+    post:
+      operationId: querySop
+      tags: [sop]
+      summary: Answer a question from the ingested SOP
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SopQuestion"
+      responses:
+        "200":
+          description: Grounded answer and cited SOP sources
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SopQueryResult"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "503":
+          description: SOP content or a required service is unavailable
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
 components:
   schemas:
     HealthStatus:
@@ -33,4 +65,41 @@ components:
           type: string
       required:
         - status
+    SopQuestion:
+      type: object
+      additionalProperties: false
+      properties:
+        question:
+          type: string
+          minLength: 1
+          maxLength: 4000
+      required: [question]
+    SopSource:
+      type: object
+      properties:
+        section_ref:
+          type: string
+        quote:
+          type: string
+        source_chunk:
+          type: string
+        verified:
+          type: boolean
+      required: [section_ref, quote, source_chunk, verified]
+    SopQueryResult:
+      type: object
+      properties:
+        answer:
+          type: string
+        sources:
+          type: array
+          items:
+            $ref: "#/components/schemas/SopSource"
+      required: [answer, sources]
+    ApiError:
+      type: object
+      properties:
+        error:
+          type: string
+      required: [error]
 

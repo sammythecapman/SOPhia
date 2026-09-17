@@ -1,10 +1,11 @@
-# [Project name]
+# sop-query-tool
 
-_Replace the heading above with the project's name, and this line with one sentence describing what this app does for users._
+A grounded question-answering tool for SBA SOP 50 10 8.
 
 ## Run & Operate
 
-- `pnpm --filter @workspace/api-server run dev` — run the API server (port 5000)
+- `pnpm --filter @workspace/api-server run dev` — run the Flask API
+- `pnpm --filter @workspace/sop-query-tool run dev` — run the React frontend
 - `pnpm run typecheck` — full typecheck across all packages
 - `pnpm run build` — typecheck + build all packages
 - `pnpm --filter @workspace/api-spec run codegen` — regenerate API hooks and Zod schemas from the OpenAPI spec
@@ -14,15 +15,18 @@ _Replace the heading above with the project's name, and this line with one sente
 ## Stack
 
 - pnpm workspaces, Node.js 24, TypeScript 5.9
-- API: Express 5
-- DB: PostgreSQL + Drizzle ORM
+- API: Flask
+- DB: PostgreSQL + pgvector
 - Validation: Zod (`zod/v4`), `drizzle-zod`
 - API codegen: Orval (from OpenAPI spec)
 - Build: esbuild (CJS bundle)
 
 ## Where things live
 
-_Populate as you build — short repo map plus pointers to the source-of-truth file for DB schema, API contracts, theme files, etc._
+- `artifacts/api-server/app.py` — Flask API and grounded answer pipeline
+- `artifacts/sop-query-tool/` — React frontend
+- `migrations/001_create_sop_chunks.sql` — pgvector schema
+- `scripts/ingest_sop.py` — guarded DOCX ingestion
 
 ## Architecture decisions
 

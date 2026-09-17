@@ -1,0 +1,28 @@
+kind = "web"
+previewPath = "/"
+title = "SOP Query Tool"
+description = "A self-contained retrieval-augmented question-answering tool for SBA SOP 50 10 8, with a React interface, Flask API, PostgreSQL pgvector retrieval, and a guarded document ingestion workflow."
+version = "1.0.0"
+id = "artifacts/sop-query-tool"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 23318
+
+[services.development]
+run = "pnpm --filter @workspace/sop-query-tool run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/sop-query-tool", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/sop-query-tool/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "23318"
+BASE_PATH = "/"
