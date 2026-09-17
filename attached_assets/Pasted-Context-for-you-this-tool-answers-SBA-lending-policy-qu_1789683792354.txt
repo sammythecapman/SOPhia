@@ -1,0 +1,48 @@
+Context for you: this tool answers SBA lending policy questions against SOP 50 10 8.1, effective October 1, 2026. The last run correctly fired a negative support badge at the sub-question level, added the version notice, separated applied conclusions from quoted rules, and fixed metadata rendering. Two defects remain and they are the priority. Do not take on other improvements in this round.
+
+DEFECT 1: affirmative support badge on a provision that does not apply to the transaction
+
+The test fact pattern was a full change of ownership funded by a ROBS, with a seller note and no retained seller ownership and no ESOP. For the seller note sub-question the tool retrieved this passage from Appendix 15, page 342, and displayed SUPPORTS THIS CONCLUSION next to it:
+
+"For ESOP transactions, there is a statutory requirement that if the seller of the employer small business remains as a partial owner, the seller must provide a full, unlimited guarantee regardless of ownership."
+
+That provision governs ESOP transactions where the seller retains partial ownership. Neither condition is present. The entailment check passed because the proposition paraphrased the quote, which means the check is measuring textual similarity and not whether the provision's trigger matches the facts.
+
+Build an applicability gate that runs before the entailment check. A provision cannot support a conclusion unless its trigger conditions match the fact pattern on every one of these dimensions:
+
+Transaction type. ESOP, 504, 7(a), change of ownership, partial change of ownership, multi-step change of ownership, startup, refinance, franchise, expansion.
+Entity or ownership structure. C corp, LLC, trust or retirement plan ownership, co-borrower, EPC and OC structure.
+Party role. Seller retaining ownership versus exiting seller, plan sponsor, plan participant, trustee, guarantor, selling owner under 20 percent.
+Program or authority scope. A provision citing an ESOP-specific statutory authority applies only to ESOPs.
+
+Implement this as structured metadata on the chunks rather than as a prompt instruction. Tag each chunk at index time with the transaction types, entity structures, party roles, and program scope it governs. Extract the same attributes from the user's fact pattern. Gate on the intersection. A chunk whose transaction type does not include the fact pattern's transaction type is ineligible to support a conclusion, no matter how high it scores on similarity.
+
+Render a third, distinct state for this case: "Provision not applicable to this transaction type," with a one-line reason naming the mismatch, for example "governs ESOP transactions; this is a 7(a) change of ownership." Keep it visually separate from both the affirmative badge and the support-not-established badge, and never show it as affirmative.
+
+Consequence to fix at the same time. In the last run the seller note block said "Support not established" at the top and then presented the same ESOP quote under a "Supporting SOP Provisions" heading with an affirmative badge. When a sub-question resolves to not established or not applicable, nothing beneath it may carry an affirmative support badge. Present rejected evidence under a heading that says it was reviewed and rejected, with the reason, or present nothing.
+
+DEFECT 2: guarantors collapsed instead of enumerated
+
+For the ROBS fact pattern the tool named one guarantor, the buyer as sole plan participant and trustee. The facts trigger at least three separate obligations: she is a 32 percent direct owner, she is the plan sponsor for purposes of the page 47 ROBS guaranty requirement, and the plan holds 68 percent, which implicates the corporate or other guaranties requirements and the additional conditions that attach when a trust provides a guaranty, both referenced in the page 93 context.
+
+Restructure guarantor output as an enumerated table, one row per party per capacity, never collapsed into prose. Each row must carry:
+
+Party, named from the fact pattern.
+Capacity in which that party signs. Direct owner, indirect owner, plan sponsor, plan participant, trustee, entity owner, selling owner.
+Ownership percentage attributable in that capacity, where applicable.
+Guaranty type required. Unlimited full, limited, secured, two-year.
+Triggering provision, with page number.
+Any additional conditions that attach, for example the requirements that apply when a trust provides the guaranty.
+
+Rules for building the table. Evaluate every party in the fact pattern against every guaranty trigger independently, so one party appearing in two capacities produces two rows. Compute ownership thresholds in code, not in generated text, and state the comparison explicitly, for example "32 percent, which is at or above the 20 percent threshold." Where the SOP cross-references another paragraph for entity or trust guarantors, retrieve that paragraph and populate the additional conditions column rather than leaving the cross-reference unresolved. If a party's obligation is genuinely unresolved on the retrieved text, give it a row marked unresolved with the reason, rather than omitting the party.
+
+Regression cases for this round. Expected results assume a post October 1, 2026 approval date.
+
+Applicability gate, negative control. An ordinary 7(a) full change of ownership with a seller note, no ESOP, no retained seller ownership. Expected: no ESOP, 504, or partial change of ownership provision is presented as supporting any conclusion. If those chunks continue to rank highly, the problem is in chunking or tagging rather than ranking, and the tags need to be fixed before moving on.
+Applicability gate, positive control. An actual ESOP transaction where the seller retains 15 percent. Expected: the page 342 ESOP provision is presented with an affirmative badge and produces a guarantor row for the retained seller.
+Applicability gate, near miss. A partial change of ownership, not an ESOP, where the seller retains 25 percent. Expected: the ESOP provision is marked not applicable, and the partial change of ownership guaranty provisions are the ones that support the conclusion.
+Guarantor enumeration, the ROBS pattern. The original fact pattern. Expected: at least three rows covering the 32 percent direct ownership trigger, the plan sponsor trigger at page 47, and the plan's 68 percent entity or trust guaranty obligation with its additional conditions populated.
+Guarantor enumeration, threshold arithmetic. Post-sale ownership of buyer 45 percent, spouse 19 percent, key employee 36 percent. Expected: rows for buyer and key employee, and explicit handling of the spouse at 19 percent including whether attribution applies, with the comparison to the 20 percent threshold stated.
+Guarantor enumeration, unresolved case. A fact pattern where a party's obligation is not resolvable on the retrieved text. Expected: that party appears with an unresolved row and a reason, not omitted.
+
+Two guardrails. Do not implement the applicability gate as an instruction in the answer-generation prompt, because that is what failed this round; it needs to be structured metadata and a filter that runs before generation. And do not let the guarantor table fall back to prose when the analysis gets complicated, since collapsing is the exact failure being fixed and a missing row means a missing signature at closing.
