@@ -1,0 +1,76 @@
+Context for you: this tool answers SBA lending policy questions against SOP 50 10 8.1, effective October 1, 2026. The last run added the applicability gate, the not-applicable state, the rejected-evidence heading, and the guarantor table, all of which work structurally. But the gate is now excluding governing text while admitting non-governing text, the headline conclusion rests on a provision whose own conditions exclude these facts, and the output runs roughly fifteen screens for a two-question query. Fix these in order. Defect 1 is the most urgent because a gate that rejects the governing provision is worse than no gate.
+
+DEFECT 1: the gate is rejecting the governing provisions
+
+Two chunks from Appendix 15: 7(a) Changes of Ownership were rejected with the reason "provision governs ESOP authority; the facts indicate 7(a) authority." One of them was page 350, "Equity Requirements: The minimum equity injection requirement for change of ownership loans is based on the type of transaction." That is the most on-point provision in the document for the first sub-question, and it was excluded. The other was page 342.
+
+This is section bleed at index time: the ESOP discussion elsewhere in Appendix 15 contaminated the transaction-type tags of neighboring chunks. Fix the tagging, not the ranking.
+
+Re-derive transaction-type tags from the chunk's own text and its nearest enclosing heading, not from ancestor sections or adjacent chunks.
+A chunk inside Appendix 15 governs change-of-ownership transactions by default. An ESOP tag applies only where the chunk's own text names ESOPs or cites ESOP authority.
+Audit every chunk currently tagged with an ESOP transaction type and confirm the tag is justified by that chunk's own text. Print the list so it can be reviewed.
+Add a hard rule: if a chunk's nearest heading names a transaction type, that type must appear in its tags.
+
+Verification: re-run the original ROBS fact pattern and confirm both Appendix 15 chunks are admitted and at least one of them supports the equity injection conclusion.
+
+DEFECT 2: the gate is missing two dimensions
+
+Two provisions carried SUPPORTS THIS CONCLUSION that cannot apply to a $1.85MM standard 7(a) change of ownership:
+
+Page 127, Credit Standards for 7(a) Small Loans and SBA Express, used to support the seller note conclusion. This loan is neither a 7(a) Small Loan nor SBA Express.
+Page 173, 7(a) Export Trade Finance, International Trade, Credit Standards, used to support a general credit analysis proposition.
+
+Neither is a transaction-type mismatch, which is why the current gate missed them. Add two dimensions:
+
+Loan program and product line. Standard 7(a), 7(a) Small, SBA Express, Export Working Capital, International Trade, CAPLines, MARC, 504. A provision under a product-specific chapter governs only that product. Extract the applicable product from the fact pattern and gate on it.
+Loan size band. Tag each chunk with the loan-size range its section governs, for example the 7(a) Small Loans threshold, and gate on the stated loan amount.
+
+When the fact pattern does not specify a product, treat it as Standard 7(a) and say so in the answer rather than admitting every product's provisions.
+
+DEFECT 3: supporting provisions must have their own conditions checked against the facts
+
+The bottom line concluded the ROBS money counts because it is "an equity investment not subject to repayment agreements prior to release of the guaranty," cited to Appendix 3, page 277. That passage is the Non-controlling Minority Equity Investment definition, and its own context requires the investor to hold less than 20 percent and exert no control. Here the plan holds 68 percent and the buyer is the trustee, so the provision excludes this structure rather than supporting it. Separately, the page 350 startup injection provision was applied to a change of ownership even though its own text says to see Appendix 15 for changes of ownership.
+
+Add an internal-conditions check that runs after the gate and before any provision may support a conclusion:
+
+Extract the conditions stated inside the provision and its surrounding context: ownership thresholds, control requirements, business-age or startup status, entity form, dollar thresholds, and explicit cross-references that redirect to another section.
+Test each condition against the fact pattern, computing numeric comparisons in code.
+If any condition fails, the provision cannot support the conclusion. Render it as not applicable with the failing condition named, for example "requires investor to hold less than 20 percent; the plan holds 68 percent."
+If a provision's own text redirects elsewhere for the fact pattern's transaction type, follow the cross-reference and prefer the referenced provision.
+
+Verification: re-run the ROBS pattern and confirm the Appendix 3 minority-investor definition is rejected on the 20 percent condition, and that the startup injection provision is either rejected or replaced by the Appendix 15 change-of-ownership equity requirement.
+
+DEFECT 4: the output is too long to use
+
+Fifteen screens for two questions means an attorney may as well read the SOP directly. Every retrieved chunk, accepted or rejected, currently renders as a full card with a pull quote and a context window, and rejected evidence consumes more space than the answer. Restructure the display without changing what is computed.
+
+Default view, target one to two screens total:
+
+Version and effective-date notice, one line.
+Bottom line, three sentences maximum.
+Per sub-question: the applied conclusion in no more than two sentences, with an inline page cite.
+The guarantor table.
+A "Provisions to read" block listing the three or four governing passages, each as breadcrumb plus page number, nothing else. This is the block that makes the tool worth using instead of reading the SOP.
+Everything else collapsed.
+
+Collapsed by default:
+
+Supporting evidence cards with pull quotes. Context windows expand only on click.
+Rejected evidence, collapsed to a single summary line, for example "7 provisions reviewed and rejected," expanding to the list with one line each: breadcrumb, page, and the rejection reason. Full cards only on further click.
+
+Remove the repeated pull quote plus context pair inside each card; show the quote with its surrounding text once, highlighted in place. Make the "See cited passage above · Page 47" pointers real anchor links.
+
+DEFECT 5: the guarantor conclusion still collapses, and a row may be missing
+
+The applied conclusion above the table reads "the unconditional guaranty must be signed by the trustee of the retirement trust, which in this case is the buyer," which defeats the table's purpose. Replace that prose with a one-line pointer to the table. Confirm the table contains a row for the buyer's 32 percent direct ownership as a separate trigger from her trustee and plan sponsor capacities. If that row is absent, fix the row generator: every capacity a party holds produces its own row.
+
+Regression cases. All assume a post October 1, 2026 approval date. Score each on whether governing provisions are admitted, whether every supporting provision passes both the gate and the internal-conditions check, whether arithmetic is computed in code, and whether the default view fits two screens.
+
+The original ROBS pattern. Expect the Appendix 15 equity provisions admitted, the Appendix 3 minority-investor definition rejected on the 20 percent condition, the page 127 and page 173 provisions rejected on product line, and a guarantor table with rows for 32 percent direct ownership, plan sponsor, trustee, and the plan's 68 percent entity interest.
+Same pattern, but a $300,000 loan. Expect the 7(a) Small Loan provisions to become applicable and the standard 7(a) provisions to be gated accordingly, confirming the size band works in both directions.
+A genuine SBA Express application. Expect the page 127 provisions admitted. This is the positive control for Defect 2.
+A genuine ESOP transaction with the seller retaining 15 percent. Expect the ESOP provisions admitted. Positive control for Defect 1, confirming the tagging fix did not simply delete ESOP tags.
+A startup 7(a) with a new C corp and no prior operations. Expect the page 350 startup injection provision admitted with a computed dollar figure. Positive control for Defect 3, confirming the conditions check admits provisions whose conditions are met.
+A change of ownership where the buyer holds 100 percent and there is no trust or plan. Expect a single guarantor row and a one-screen answer.
+
+Two guardrails. Do not implement the internal-conditions check as a prompt instruction; it needs to be extracted conditions evaluated in code, for the same reason the gate had to be. And do not solve the length problem by retrieving or checking less, since the collapse is a display change only and the rejected evidence must remain available on click.
