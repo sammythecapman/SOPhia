@@ -19,7 +19,7 @@ from db import connection  # noqa: E402
 MODEL = "text-embedding-3-small"
 MAX_CHARS = 6000
 BATCH_SIZE = 64
-HEADING_RE = re.compile(r"^(?:[A-Z]|\d+)(?:[.\-]\d+)*(?:[.)])?\s+\S")
+STRUCTURAL_HEADING_RE = re.compile(r"^heading [1-6]$")
 
 
 def find_docx(explicit: str | None) -> Path:
@@ -40,7 +40,7 @@ def find_docx(explicit: str | None) -> Path:
 def is_heading(paragraph) -> bool:
     text = paragraph.text.strip()
     style = (paragraph.style.name or "").lower()
-    return bool(text and ("heading" in style or (len(text) < 180 and HEADING_RE.match(text))))
+    return bool(text and STRUCTURAL_HEADING_RE.fullmatch(style))
 
 
 def split_text(text: str) -> list[str]:
@@ -63,6 +63,7 @@ def extract_chunks(path: Path) -> list[dict[str, str]]:
     heading_stack: list[str] = []
     body: list[str] = []
     output: list[dict[str, str]] = []
+    in_table_of_contents = False
 
     def flush() -> None:
         nonlocal body
@@ -77,6 +78,16 @@ def extract_chunks(path: Path) -> list[dict[str, str]]:
         text = paragraph.text.strip()
         if not text:
             continue
+        style = (paragraph.style.name or "").lower()
+        if text.casefold() == "table of contents" and "heading" in style:
+            flush()
+            heading_stack = []
+            in_table_of_contents = True
+            continue
+        if in_table_of_contents and style.startswith("toc"):
+            continue
+        if in_table_of_contents:
+            in_table_of_contents = False
         if is_heading(paragraph):
             flush()
             level_match = re.search(r"(\d+)", paragraph.style.name or "")
