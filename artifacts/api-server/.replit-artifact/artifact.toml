@@ -16,7 +16,7 @@ run = "pnpm --filter @workspace/api-server run dev"
 # The SOP routes live in the Flask application, not the legacy Express scaffold.
 
 [services.production.run]
-args = ["uv", "run", "gunicorn", "--bind", "0.0.0.0:8080", "--workers", "2", "--threads", "4", "app:app"]
+args = ["uv", "run", "gunicorn", "--chdir", "artifacts/api-server", "--bind", "0.0.0.0:8080", "--workers", "2", "--threads", "4", "app:app"]
 
 [services.production.run.env]
 PORT = "8080"
