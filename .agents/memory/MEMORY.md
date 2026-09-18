@@ -5,3 +5,4 @@
 - [SOP stage diagnostics](sop-stage-diagnostics.md) — preserve per-chunk gate, synthesizer, routing, and row-citation telemetry so downstream failures are traceable.
 - [Psycopg SQL literals](psycopg-sql-literals.md) — escape percent signs as `%%` in parameterized SQL string literals.
 - [Shared rate limiting](shared-rate-limiting.md) — process-local counters are insufficient when production runs multiple workers.
+- [Replit production data publish](replit-production-data-publish.md) — production data requires the explicit Publish option to copy development data; schema sync alone is insufficient.
