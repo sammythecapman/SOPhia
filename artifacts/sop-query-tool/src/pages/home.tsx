@@ -17,10 +17,38 @@ import {
   ArrowRight,
   BookOpen,
   FileText,
-  Library,
   ShieldCheck,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
+
+function SophiaMark() {
+  return (
+    <svg
+      aria-label="SOPhia"
+      className="h-5 w-5"
+      role="img"
+      viewBox="0 0 32 32"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      <title>SOPhia</title>
+      <path
+        d="M23.8 8.1C20.1 5.1 12.1 5.6 9.2 9.1c-2.9 3.6.4 6.5 5.9 7.8 5.5 1.3 8.4 3.4 7 7.2-1.4 3.8-9.8 5.5-15.2.8"
+        stroke="currentColor"
+        strokeWidth="2.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M12.2 7.6c-1.6 1.3-2.4 2.7-2.4 4.2M19.7 21.1c-.8 1.2-2 2.2-3.5 2.8"
+        stroke="currentColor"
+        strokeWidth="1.35"
+        strokeLinecap="round"
+        opacity=".75"
+      />
+    </svg>
+  );
+}
 
 function formatDate(date: string) {
   const parsed = new Date(`${date}T00:00:00`);
@@ -306,14 +334,16 @@ export default function Home() {
       <header className="sticky top-0 z-10 flex w-full items-center justify-between border-b border-border/50 bg-background/90 px-6 py-5 backdrop-blur-sm md:px-8">
         <div className="flex items-center gap-3">
           <div className="rounded-md bg-primary p-2">
-            <Library className="h-5 w-5 text-primary-foreground" />
+            <span className="text-primary-foreground">
+              <SophiaMark />
+            </span>
           </div>
           <div>
             <h1 className="m-0 font-serif text-xl font-medium leading-none text-primary">
-              SOP 50 10 8.1
+              SOPhia
             </h1>
             <span className="mt-1 block font-sans text-xs font-semibold uppercase tracking-widest text-muted-foreground">
-              Lender Policy Query
+              SOP 50 10 8.1 · Lender Policy Query
             </span>
           </div>
         </div>
