@@ -16,10 +16,8 @@ import {
   AlertTriangle,
   ArrowRight,
   BookOpen,
-  CheckCircle2,
   FileText,
   Library,
-  Quote,
   ShieldCheck,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
@@ -54,31 +52,22 @@ function contextWindow(source: SopSource) {
 function CitationCard({ source }: { source: SopSource }) {
   const context = contextWindow(source);
   return (
-    <Card className="border-border/60 bg-white/70 shadow-sm">
-      <CardHeader className="gap-3 border-b border-border/50 bg-secondary/20 px-5 py-4">
+    <details id={`citation-${source.source_id}`} className="rounded-lg border border-border/60 bg-white/70 shadow-sm">
+      <summary className="cursor-pointer list-none px-5 py-4">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0">
-            <CardTitle className="text-sm font-sans leading-relaxed text-primary">
-              {source.section_ref}
-            </CardTitle>
+            <p className="text-sm font-sans leading-relaxed text-primary">{source.section_ref}</p>
             <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
               <span>{source.source_version}</span>
-              <span aria-hidden="true">·</span>
-              <span>Effective {formatDate(source.effective_date)}</span>
               <span aria-hidden="true">·</span>
               <span>
                 {source.page_number ? `Page ${source.page_number}` : "Page not recorded"}
               </span>
+              <span aria-hidden="true">·</span>
+              <span>Open cited passage</span>
             </div>
           </div>
           <div className="flex shrink-0 flex-wrap gap-2">
-            <Badge
-              variant="outline"
-              className="gap-1 border-emerald-700/30 bg-emerald-50 text-[10px] font-semibold uppercase tracking-wider text-emerald-800"
-            >
-              <CheckCircle2 className="h-3 w-3" />
-              Quote located in source
-            </Badge>
             {source.applicability_status === "not_applicable" ? (
               <Badge
                 variant="outline"
@@ -106,34 +95,72 @@ function CitationCard({ source }: { source: SopSource }) {
             )}
           </div>
         </div>
-      </CardHeader>
-      <CardContent className="space-y-4 px-5 py-5">
-        <blockquote className="flex gap-3 border-l-2 border-primary/30 pl-4 font-serif text-base italic leading-relaxed text-foreground/90">
-          <Quote className="mt-1 h-4 w-4 shrink-0 text-primary/60" />
-          <span>{source.quote}</span>
-        </blockquote>
-        <details open className="rounded-md border border-border/60 bg-secondary/10">
-          <summary className="cursor-pointer list-none px-4 py-3 text-xs font-semibold uppercase tracking-widest text-muted-foreground">
-            <span className="inline-flex items-center gap-2">
-              <FileText className="h-3.5 w-3.5" />
-              Context around quote
-            </span>
-          </summary>
-          <div className="border-t border-border/60 px-4 py-4 font-serif text-sm leading-7 text-foreground/75">
-            <span>{context.before}</span>
-            <mark className="rounded bg-amber-200/80 px-1 py-0.5 text-foreground">
-              {context.quote || source.quote}
-            </mark>
-            <span>{context.after}</span>
-          </div>
-        </details>
+      </summary>
+      <div className="border-t border-border/60 px-5 py-5">
+        <div className="rounded-md bg-secondary/10 px-4 py-4 font-serif text-sm leading-7 text-foreground/75">
+          <span>{context.before}</span>
+          <mark className="rounded bg-amber-200/80 px-1 py-0.5 text-foreground">
+            {context.quote || source.quote}
+          </mark>
+          <span>{context.after}</span>
+        </div>
         {source.applicability_reason && (
-          <p className="rounded-md border border-rose-200 bg-rose-50 px-4 py-3 text-xs leading-relaxed text-rose-900">
+          <p className="mt-4 rounded-md border border-rose-200 bg-rose-50 px-4 py-3 text-xs leading-relaxed text-rose-900">
             {source.applicability_reason}
           </p>
         )}
-      </CardContent>
-    </Card>
+      </div>
+    </details>
+  );
+}
+
+function ProvisionsToRead({ sources }: { sources: SopSource[] }) {
+  if (sources.length === 0) return null;
+  return (
+    <section className="rounded-lg border border-border/60 bg-white/70 px-5 py-4">
+      <div className="flex items-center gap-2">
+        <FileText className="h-4 w-4 text-primary" />
+        <h3 className="font-sans text-xs font-semibold uppercase tracking-widest text-primary">
+          Provisions to read
+        </h3>
+      </div>
+      <ul className="mt-3 space-y-2 text-sm text-foreground/80">
+        {sources.map((source) => (
+          <li key={`${source.source_id}-${source.page_number}`} className="flex gap-2">
+            <span className="text-primary">•</span>
+            <span>
+              <a className="hover:underline" href={`#citation-${source.source_id}`}>
+                {source.section_ref}
+                <span className="ml-2 text-xs text-muted-foreground">
+                  {source.page_number ? `Page ${source.page_number}` : "Page not recorded"}
+                </span>
+              </a>
+            </span>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+function RejectedEvidence({ sources }: { sources: SopSource[] }) {
+  if (sources.length === 0) return null;
+  return (
+    <details className="rounded-lg border border-amber-200 bg-amber-50/60">
+      <summary className="cursor-pointer list-none px-5 py-4 text-xs font-semibold uppercase tracking-widest text-amber-900">
+        Retrieved evidence reviewed and rejected · {sources.length} provisions
+      </summary>
+      <div className="space-y-2 border-t border-amber-200 px-5 py-4 text-xs text-amber-950">
+        {sources.map((source, index) => (
+          <div key={`${source.source_id}-${index}`} className="border-b border-amber-200/70 pb-2 last:border-0 last:pb-0">
+            <div className="font-semibold">
+              {source.section_ref} · {source.page_number ? `Page ${source.page_number}` : "Page not recorded"}
+            </div>
+            {source.applicability_reason && <div>{source.applicability_reason}</div>}
+          </div>
+        ))}
+      </div>
+    </details>
   );
 }
 
@@ -156,8 +183,10 @@ function Proposition({
               key={`${source.source_id}-${index}`}
               className="rounded-md border border-border/50 bg-secondary/10 px-4 py-3 text-xs text-muted-foreground"
             >
-              See cited passage above ·{" "}
-              {source.page_number ? `Page ${source.page_number}` : "source page not recorded"}
+                        <a className="hover:underline" href={`#citation-${source.source_id}`}>
+                          See cited passage above ·{" "}
+                          {source.page_number ? `Page ${source.page_number}` : "source page not recorded"}
+                        </a>
             </div>
           ) : (
             <CitationCard key={`${source.source_id}-${index}`} source={source} />
@@ -227,7 +256,10 @@ function GuarantorTable({
                         key={`${source.source_id}-${citationIndex}`}
                         className="text-[11px] text-muted-foreground"
                       >
-                        See cited passage above
+                        <a className="hover:underline" href={`#citation-${source.source_id}`}>
+                          See cited passage above ·{" "}
+                          {source.page_number ? `Page ${source.page_number}` : "source page not recorded"}
+                        </a>
                       </div>
                     ) : (
                       <CitationCard key={`${source.source_id}-${citationIndex}`} source={source} />
@@ -423,95 +455,99 @@ export default function Home() {
                 </CardContent>
               </Card>
 
+              <ProvisionsToRead sources={result.provisions_to_read ?? []} />
+
               <div className="space-y-7">
                 {(() => {
                   const seenCitationIds = new Set<number>();
-                  return result.subanswers.map((subanswer, index) => (
-                  <section key={`${subanswer.question}-${index}`} className="space-y-4">
-                    {result.subanswers.length > 1 && (
-                      <h4 className="font-sans text-sm font-semibold uppercase tracking-wider text-muted-foreground">
-                        {subanswer.question}
-                      </h4>
-                    )}
-                    {subanswer.support_status === "not_established" && (
-                      <Alert className="border-amber-300 bg-amber-50 text-amber-950">
-                        <AlertTriangle className="h-4 w-4" />
-                        <AlertTitle>Support not established</AlertTitle>
-                        <AlertDescription>
-                          {subanswer.support_note ??
-                            "The retrieved rule did not establish the applied conclusion."}
-                        </AlertDescription>
-                      </Alert>
-                    )}
-                    {subanswer.support_status === "not_applicable" && (
-                      <Alert className="border-rose-300 bg-rose-50 text-rose-950">
-                        <AlertTriangle className="h-4 w-4" />
-                        <AlertTitle>Provision not applicable to this transaction type</AlertTitle>
-                        <AlertDescription>
-                          {subanswer.support_note ??
-                            "The retrieved provision governs a different transaction or fact pattern."}
-                        </AlertDescription>
-                      </Alert>
-                    )}
-                    {(subanswer.support_status === "no_responsive_provision" ||
-                      subanswer.support_status === "retrieval_empty") && (
-                      <Alert className="border-amber-300 bg-amber-50 text-amber-950">
-                        <AlertTriangle className="h-4 w-4" />
-                        <AlertTitle>Retrieval found no responsive provision</AlertTitle>
-                        <AlertDescription>{subanswer.support_note}</AlertDescription>
-                      </Alert>
-                    )}
-                    {subanswer.applied_conclusion && (
-                      <section className="space-y-2">
-                        <h5 className="font-sans text-xs font-semibold uppercase tracking-widest text-primary">
-                          Applied conclusion
-                        </h5>
-                        <Proposition
-                          proposition={subanswer.applied_conclusion}
-                          seenCitationIds={seenCitationIds}
-                        />
-                      </section>
-                    )}
-                    {subanswer.guarantor_rows.length > 0 && (
-                      <section className="space-y-2">
-                        <h5 className="font-sans text-xs font-semibold uppercase tracking-widest text-primary">
-                          Guarantors by party and capacity
-                        </h5>
-                        <GuarantorTable
-                          rows={subanswer.guarantor_rows}
-                          seenCitationIds={seenCitationIds}
-                        />
-                      </section>
-                    )}
-                    {subanswer.rejected_citations.length > 0 && (
-                      <section className="space-y-2">
-                        <h5 className="font-sans text-xs font-semibold uppercase tracking-widest text-amber-800">
-                          Retrieved evidence reviewed and rejected
-                        </h5>
-                        {subanswer.rejected_citations.map((source, sourceIndex) => (
-                          <CitationCard
-                            key={`rejected-${source.source_id}-${sourceIndex}`}
-                            source={source}
-                          />
-                        ))}
-                      </section>
-                    )}
-                    {subanswer.propositions.length > 0 && (
-                      <section className="space-y-2">
-                        <h5 className="font-sans text-xs font-semibold uppercase tracking-widest text-muted-foreground">
-                          Supporting SOP provisions
-                        </h5>
-                        {subanswer.propositions.map((proposition, propositionIndex) => (
-                          <Proposition
-                            key={`${subanswer.question}-${propositionIndex}`}
-                            proposition={proposition}
-                            seenCitationIds={seenCitationIds}
-                          />
-                        ))}
-                      </section>
-                    )}
-                  </section>
-                  ));
+                  const rejected = Array.from(
+                    new Map(
+                      result.subanswers
+                        .flatMap((subanswer) => subanswer.rejected_citations)
+                        .map((source) => [
+                          `${source.source_id}-${source.applicability_reason ?? ""}`,
+                          source,
+                        ]),
+                    ).values(),
+                  );
+                  return (
+                    <>
+                      {result.subanswers.map((subanswer, index) => (
+                        <section key={`${subanswer.question}-${index}`} className="space-y-4">
+                          {result.subanswers.length > 1 && (
+                            <h4 className="font-sans text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+                              {subanswer.question}
+                            </h4>
+                          )}
+                          {subanswer.support_status === "not_established" && (
+                            <Alert className="border-amber-300 bg-amber-50 text-amber-950">
+                              <AlertTriangle className="h-4 w-4" />
+                              <AlertTitle>Support not established</AlertTitle>
+                              <AlertDescription>
+                                {subanswer.support_note ??
+                                  "The retrieved rule did not establish the applied conclusion."}
+                              </AlertDescription>
+                            </Alert>
+                          )}
+                          {subanswer.support_status === "not_applicable" && (
+                            <Alert className="border-rose-300 bg-rose-50 text-rose-950">
+                              <AlertTriangle className="h-4 w-4" />
+                              <AlertTitle>Provision not applicable to this transaction type</AlertTitle>
+                              <AlertDescription>
+                                {subanswer.support_note ??
+                                  "The retrieved provision governs a different transaction or fact pattern."}
+                              </AlertDescription>
+                            </Alert>
+                          )}
+                          {(subanswer.support_status === "no_responsive_provision" ||
+                            subanswer.support_status === "retrieval_empty") && (
+                            <Alert className="border-amber-300 bg-amber-50 text-amber-950">
+                              <AlertTriangle className="h-4 w-4" />
+                              <AlertTitle>Retrieval found no responsive provision</AlertTitle>
+                              <AlertDescription>{subanswer.support_note}</AlertDescription>
+                            </Alert>
+                          )}
+                          {subanswer.applied_conclusion && (
+                            <section className="space-y-2">
+                              <h5 className="font-sans text-xs font-semibold uppercase tracking-widest text-primary">
+                                Applied conclusion
+                              </h5>
+                              <Proposition
+                                proposition={subanswer.applied_conclusion}
+                                seenCitationIds={seenCitationIds}
+                              />
+                            </section>
+                          )}
+                          {subanswer.guarantor_rows.length > 0 && (
+                            <section className="space-y-2">
+                              <h5 className="font-sans text-xs font-semibold uppercase tracking-widest text-primary">
+                                Guarantors by party and capacity
+                              </h5>
+                              <GuarantorTable
+                                rows={subanswer.guarantor_rows}
+                                seenCitationIds={seenCitationIds}
+                              />
+                            </section>
+                          )}
+                          {subanswer.propositions.length > 0 && (
+                            <section className="space-y-2">
+                              <h5 className="font-sans text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+                                Supporting SOP provisions
+                              </h5>
+                              {subanswer.propositions.map((proposition, propositionIndex) => (
+                                <Proposition
+                                  key={`${subanswer.question}-${propositionIndex}`}
+                                  proposition={proposition}
+                                  seenCitationIds={seenCitationIds}
+                                />
+                              ))}
+                            </section>
+                          )}
+                        </section>
+                      ))}
+                      <RejectedEvidence sources={rejected} />
+                    </>
+                  );
                 })()}
               </div>
 

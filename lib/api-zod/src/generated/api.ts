@@ -148,7 +148,21 @@ export const QuerySopResponse = zod.object({
   "applicability_status": zod.enum(['applicable', 'not_applicable']),
   "applicability_reason": zod.string().nullable(),
   "verified": zod.boolean()
-}))
+})).optional(),
+  "provisions_to_read": zod.array(zod.object({
+  "source_id": zod.number().int(),
+  "section_ref": zod.string(),
+  "quote": zod.string(),
+  "source_chunk": zod.string(),
+  "source_version": zod.string(),
+  "effective_date": zod.string(),
+  "page_number": zod.number().int().nullable(),
+  "quote_located": zod.boolean(),
+  "supports_conclusion": zod.boolean(),
+  "applicability_status": zod.enum(['applicable', 'not_applicable']),
+  "applicability_reason": zod.string().nullable(),
+  "verified": zod.boolean()
+})).optional()
 })
 
 

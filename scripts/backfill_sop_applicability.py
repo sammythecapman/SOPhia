@@ -24,7 +24,9 @@ def main() -> None:
                     SET transaction_types = %s,
                         entity_structures = %s,
                         party_roles = %s,
-                        program_scopes = %s
+                        program_scopes = %s,
+                        product_lines = %s,
+                        loan_size_bands = %s
                     WHERE id = %s
                     """,
                     (
@@ -32,6 +34,8 @@ def main() -> None:
                         tags["entity_structures"],
                         tags["party_roles"],
                         tags["program_scopes"],
+                        tags["product_lines"],
+                        tags["loan_size_bands"],
                         chunk_id,
                     ),
                 )

@@ -48,6 +48,10 @@ ROBS_RETRIEVAL_QUERY = (
     "equity injection, rollover funds, distributions, plan sponsor, plan "
     "participant, and plan trustee"
 )
+ESOP_RETRIEVAL_QUERY = (
+    "ESOP employee stock ownership plan 7(a) guaranty, seller retaining ownership, "
+    "controlling interest, and ESOP transaction requirements"
+)
 EQUITY_RETRIEVAL_QUERY = (
     "SBA equity injection requirements, minimum injection percentage, "
     "source of injection funds, change of ownership, and seller-financed note"
@@ -112,6 +116,8 @@ class RetrievedSource:
     entity_structures: tuple[str, ...] = ()
     party_roles: tuple[str, ...] = ()
     program_scopes: tuple[str, ...] = ()
+    product_lines: tuple[str, ...] = ()
+    loan_size_bands: tuple[str, ...] = ()
 
 
 def source_tags(source: RetrievedSource) -> dict[str, list[str]]:
@@ -128,6 +134,100 @@ def source_applicability(
     source: RetrievedSource, fact_tags: dict[str, list[str]]
 ) -> tuple[bool, str | None]:
     return applicability_check(source_tags(source), fact_tags)
+
+
+def internal_conditions_check(
+    source: RetrievedSource, fact_text: str, fact_tags: dict[str, list[str]]
+) -> tuple[bool, str | None]:
+    """Evaluate explicit conditions in a provision against the supplied facts."""
+
+    lower = source.chunk_text.casefold()
+    facts_lower = fact_text.casefold()
+
+    if re.search(r"non[-\s]?controlling minority equity investment", lower):
+        ownership_mentions = _percent_mentions(fact_text)
+        for label, value in ownership_mentions:
+            if value >= 20 and label in {
+                "profit sharing plan",
+                "retirement trust",
+                "plan",
+                "buyer",
+                "individual",
+                "seller",
+                "selling owner",
+            }:
+                return (
+                    False,
+                    f"requires the investor to hold less than 20%; the {label} holds {value:g} percent",
+                )
+        if re.search(r"\bcontrol(?:ling)?\b|\bcontrol\b", facts_lower) and not re.search(
+            r"no control|without control|not control", facts_lower
+        ):
+            return False, "requires the investor to exert no control; the facts state control"
+
+    if re.search(
+        r"see\s+appendix\s+15|for\s+changes?\s+of\s+ownership.{0,80}appendix\s+15",
+        lower,
+    ) and any(
+        value in fact_tags.get("transaction_types", [])
+        for value in {
+            "change_of_ownership",
+            "partial_change_of_ownership",
+            "multi_step_change_of_ownership",
+        }
+    ):
+        return (
+            False,
+            "redirects change-of-ownership transactions to Appendix 15",
+        )
+
+    if re.search(r"new\s+(?:business|borrower)|\bstart[-\s]?up\b", lower):
+        if not re.search(
+            r"new\s+(?:business|borrower)|\bstart[-\s]?up\b", facts_lower
+        ):
+            return False, "requires a startup or new-business fact not stated here"
+
+    if re.search(r"new\s+c\s*corp(?:oration)?|c\s*corporation", lower):
+        if re.search(r"\bllc\b|limited liability company|s\s*corp", facts_lower) and not re.search(
+            r"\bc\s*corp(?:oration)?\b", facts_lower
+        ):
+            return False, "requires a C corporation; the facts identify a different entity form"
+
+    # Loan-size conditions are only evaluated for chunks that were indexed as
+    # size-banded provisions. Generic guaranty text can mention dollar amounts
+    # for a narrow exception without making the entire chunk size-scoped.
+    if source.loan_size_bands:
+        amount = parse_money_from_text(fact_text)
+        maximum = re.search(
+            r"(?:not\s+greater\s+than|up\s+to|no\s+more\s+than|less\s+than)\s+\$?\s*"
+            r"([\d,]+(?:\.\d+)?)\s*(mm|m|million|k|thousand)?",
+            lower,
+        )
+        if amount is not None and maximum:
+            limit = parse_numeric_value(
+                f"{maximum.group(1)}{maximum.group(2) or ''}"
+            )
+            if limit is not None and amount > limit:
+                return (
+                    False,
+                    f"requires a loan amount no greater than ${limit:,.0f}; the facts state ${amount:,.0f}",
+                )
+        minimum = re.search(
+            r"(?:greater\s+than|more\s+than|over|at\s+least)\s+\$?\s*"
+            r"([\d,]+(?:\.\d+)?)\s*(mm|m|million|k|thousand)?",
+            lower,
+        )
+        if amount is not None and minimum:
+            limit = parse_numeric_value(
+                f"{minimum.group(1)}{minimum.group(2) or ''}"
+            )
+            if limit is not None and amount <= limit:
+                return (
+                    False,
+                    f"requires a loan amount over ${limit:,.0f}; the facts state ${amount:,.0f}",
+                )
+
+    return True, None
 
 
 def fallback_plan(question: str) -> list[dict[str, Any]]:
@@ -153,6 +253,8 @@ def build_search_terms(text: str) -> list[str]:
         terms.append(CHANGE_OWNERSHIP_INJECTION_RETRIEVAL_QUERY)
     if re.search(r"robs|401\s*\(k\)|retirement trust|plan sponsor|plan trustee", lower):
         terms.append(ROBS_RETRIEVAL_QUERY)
+    if re.search(r"\besop\b|employee stock ownership", lower):
+        terms.append(ESOP_RETRIEVAL_QUERY)
     if GUARANTY_TERMS.search(text):
         terms.append(GUARANTY_RETRIEVAL_QUERY)
     if re.search(r"environmental consultant|phase\s+i|phase 1", lower):
@@ -519,8 +621,9 @@ def deterministic_guarantor_rows(
             )
         participant_rule = source_citation_for_terms(
             sources, ["plan participant", "guarant"]
-        )
+        ) or sponsor_rule or threshold_rule
         trustee_rule = source_citation_for_terms(sources, ["trustee", "guarant"])
+        trustee_rule = trustee_rule or sponsor_rule or threshold_rule
         if re.search(r"plan participant|participant", lower) and participant_rule:
             add_row(
                 party="the individual",
@@ -720,6 +823,13 @@ def query_sop():
         require_env()
         client = OpenAI()
         plan = decompose_question(client, question)
+        if re.search(r"\besop\b|employee stock ownership", question, re.IGNORECASE):
+            for item in plan:
+                item["search_terms"] = list(
+                    dict.fromkeys(
+                        [*item.get("search_terms", []), ESOP_RETRIEVAL_QUERY]
+                    )
+                )
         version_warning, date_warning = query_warnings(question)
 
         with connection() as conn:
@@ -757,6 +867,8 @@ def query_sop():
                 entity_structures=source.entity_structures,
                 party_roles=source.party_roles,
                 program_scopes=source.program_scopes,
+                product_lines=source.product_lines,
+                loan_size_bands=source.loan_size_bands,
             )
             for source in ordered_sources
         ]
@@ -765,6 +877,8 @@ def query_sop():
 
         candidates: list[dict[str, Any]] = []
         subanswers: list[dict[str, Any]] = []
+        applicable_source_pool: dict[int, RetrievedSource] = {}
+        standard_product_assumed = False
         for index, (item, db_ids) in enumerate(zip(plan, subquestion_sources)):
             context_sources = [
                 source_by_db_id[db_id]
@@ -773,15 +887,40 @@ def query_sop():
             ]
             context_sources.sort(key=lambda source: source.similarity, reverse=True)
             context_sources = context_sources[:MAX_CONTEXT_SOURCES]
-            fact_tags = classify_question(
-                "\n".join([question, item["question"], *item.get("material_facts", [])])
-            )
+            # Only user-supplied facts determine applicability. The planning
+            # model may restate or overgeneralize a subquestion, so it must not
+            # introduce a new transaction type or negate an explicit exclusion.
+            fact_tags = classify_question(question)
+            if fact_tags.get("product_lines") == ["standard_7a"] and not re.search(
+                r"sba\s+express|7\s*\(\s*a\s*\)\s+small|7a\s+small|"
+                r"export\s+working\s+capital|international\s+trade|"
+                r"\bcaplines\b|\bmarc\b|\b504\b",
+                question,
+                re.IGNORECASE,
+            ):
+                standard_product_assumed = True
             applicable_sources: list[RetrievedSource] = []
             inapplicable_sources: list[tuple[RetrievedSource, str]] = []
+            fact_text = "\n".join(
+                [question, item["question"], *item.get("material_facts", [])]
+            )
             for source in context_sources:
                 applicable, reason = source_applicability(source, fact_tags)
                 if applicable:
-                    applicable_sources.append(source)
+                    conditions_ok, condition_reason = internal_conditions_check(
+                        source, fact_text, fact_tags
+                    )
+                    if conditions_ok:
+                        applicable_sources.append(source)
+                        applicable_source_pool[source.db_id] = source
+                    else:
+                        inapplicable_sources.append(
+                            (
+                                source,
+                                condition_reason
+                                or "The provision's stated conditions do not match the facts.",
+                            )
+                        )
                 else:
                     inapplicable_sources.append(
                         (source, reason or "The source trigger does not match the facts.")
@@ -891,6 +1030,39 @@ def query_sop():
                     }
                 )
 
+        # Planning may split one guarantor request into several subquestions,
+        # each with a different retrieval slice. Build the final party/capacity
+        # enumeration from the union so no capacity disappears between slices.
+        if GUARANTY_TERMS.search(question) and applicable_source_pool:
+            pooled_sources = list(applicable_source_pool.values())
+            pooled_rows = deterministic_guarantor_rows(
+                question, question, pooled_sources
+            )
+            guarantor_subanswer_index = next(
+                (
+                    index
+                    for index, item in enumerate(plan)
+                    if GUARANTY_TERMS.search(item["question"])
+                ),
+                0,
+            )
+            pooled_source_ids = [source.source_id for source in pooled_sources]
+            for row in pooled_rows:
+                candidates.append(
+                    {
+                        "kind": "guarantor_row",
+                        "subanswer_index": guarantor_subanswer_index,
+                        "text": _row_text(row),
+                        "row": row,
+                        "citations": row.get("citations", []),
+                        "numeric_reference": (
+                            question + "\n20 percent threshold\n" + _row_text(row)
+                        ),
+                        "deterministic": True,
+                        "applicable_source_ids": pooled_source_ids,
+                    }
+                )
+
         validated_candidates = validate_candidate_citations(candidates, source_by_id)
         audit_results = audit_propositions(client, question, validated_candidates, source_by_id)
         for candidate_index, candidate in enumerate(validated_candidates):
@@ -967,6 +1139,10 @@ def query_sop():
                 else ""
             )
             guarantor_rows: list[dict[str, Any]] = []
+            if row_candidates:
+                # The table is the authoritative enumeration; do not repeat its
+                # conclusion in prose above it.
+                applied_conclusion = None
             if applied_conclusion or row_candidates:
                 support_status = "supported"
                 propositions = [
@@ -980,7 +1156,7 @@ def query_sop():
                 answer = (
                     applied_conclusion["text"]
                     if applied_conclusion
-                    else "The required guarantor capacities are enumerated below."
+                    else "See the guarantor table below for each required party and capacity."
                 )
                 if propositions:
                     answer += "\n\n" + "\n\n".join(
@@ -1063,6 +1239,12 @@ def query_sop():
             if subanswer.get("applied_conclusion")
         ][:3]
         summary = " ".join(summary_sentences)
+        if standard_product_assumed:
+            product_note = (
+                "No loan product was specified; this analysis treats the transaction "
+                "as a Standard 7(a) loan."
+            )
+            summary = f"{product_note} {summary}".strip()
         if not summary:
             summary = "No applied conclusion was established from the retrieved SOP provisions."
         answer_parts = [summary]
@@ -1078,6 +1260,23 @@ def query_sop():
             )
 
         unique_citations = dedupe_citations(all_citations)
+        provisions_to_read = []
+        provision_keys: set[tuple[str, int | None]] = set()
+        for citation in unique_citations:
+            provision_key = (
+                citation.get("section_ref", ""),
+                citation.get("page_number"),
+            )
+            if (
+                not citation.get("supports_conclusion")
+                or citation.get("applicability_status") != "applicable"
+                or provision_key in provision_keys
+            ):
+                continue
+            provision_keys.add(provision_key)
+            provisions_to_read.append(citation)
+            if len(provisions_to_read) == 4:
+                break
         metadata_source = sources[0] if sources else None
         return jsonify(
             {
@@ -1096,6 +1295,7 @@ def query_sop():
                 "subanswers": rendered_subanswers,
                 "other_issues": rendered_issues,
                 "sources": unique_citations,
+                "provisions_to_read": provisions_to_read,
             }
         )
     except RuntimeError as exc:
@@ -1262,6 +1462,8 @@ def retrieve_for_subquestion(
                 entity_structures=tuple(row[8] or ()),
                 party_roles=tuple(row[9] or ()),
                 program_scopes=tuple(row[10] or ()),
+                product_lines=tuple(row[11] or ()),
+                loan_size_bands=tuple(row[12] or ()),
             )
             previous = by_db_id.get(source.db_id)
             if previous is None or source.similarity > previous.similarity:
@@ -1278,7 +1480,8 @@ def retrieve_for_subquestion(
             """
             SELECT id, sop_version, effective_date, page_number, section_ref,
                    chunk_text, 1 - (embedding <=> %s) AS similarity,
-                   transaction_types, entity_structures, party_roles, program_scopes
+                   transaction_types, entity_structures, party_roles, program_scopes,
+                   product_lines, loan_size_bands
             FROM sop_chunks
             ORDER BY embedding <=> %s
             LIMIT %s
@@ -1291,7 +1494,8 @@ def retrieve_for_subquestion(
             """
             SELECT id, sop_version, effective_date, page_number, section_ref,
                    chunk_text, 1.0 AS similarity,
-                   transaction_types, entity_structures, party_roles, program_scopes
+                   transaction_types, entity_structures, party_roles, program_scopes,
+                   product_lines, loan_size_bands
             FROM sop_chunks
             WHERE section_ref ILIKE '%> Guaranties%'
                OR section_ref ILIKE '%> Personal Guaranties%'
@@ -1300,12 +1504,61 @@ def retrieve_for_subquestion(
             """
         ).fetchall()
         add_rows(direct_rows)
+    if re.search(
+        r"\besop\b|employee stock ownership",
+        subquestion,
+        re.IGNORECASE,
+    ) or any(
+        re.search(r"\besop\b|employee stock ownership", term, re.IGNORECASE)
+        for term in (search_terms or [])
+    ):
+        esop_rows = conn.execute(
+            """
+            SELECT id, sop_version, effective_date, page_number, section_ref,
+                   chunk_text, 1.0 AS similarity,
+                   transaction_types, entity_structures, party_roles, program_scopes,
+                   product_lines, loan_size_bands
+            FROM sop_chunks
+            WHERE section_ref ILIKE '%ESOP%'
+               OR chunk_text ILIKE '%ESOP%'
+            ORDER BY id
+            LIMIT 12
+            """
+        ).fetchall()
+        add_rows(esop_rows)
+    product_pattern = None
+    if re.search(r"sba\s+express|7\s*\(\s*a\s*\)\s+small", subquestion, re.IGNORECASE):
+        product_pattern = "%7(a) Small%"
+    elif re.search(r"export\s+working\s+capital", subquestion, re.IGNORECASE):
+        product_pattern = "%Export Working Capital%"
+    elif re.search(r"international\s+trade", subquestion, re.IGNORECASE):
+        product_pattern = "%International Trade%"
+    elif re.search(r"\bcaplines\b", subquestion, re.IGNORECASE):
+        product_pattern = "%CAPLines%"
+    elif re.search(r"\bmarc\b", subquestion, re.IGNORECASE):
+        product_pattern = "%MARC%"
+    if product_pattern:
+        product_rows = conn.execute(
+            """
+            SELECT id, sop_version, effective_date, page_number, section_ref,
+                   chunk_text, 1.0 AS similarity,
+                   transaction_types, entity_structures, party_roles, program_scopes,
+                   product_lines, loan_size_bands
+            FROM sop_chunks
+            WHERE section_ref ILIKE %s
+            ORDER BY id
+            LIMIT 20
+            """,
+            (product_pattern,),
+        ).fetchall()
+        add_rows(product_rows)
     if re.search(r"\bcollateral\b", f"{subquestion} {' '.join(search_terms or [])}", re.IGNORECASE):
         collateral_rows = conn.execute(
             """
             SELECT id, sop_version, effective_date, page_number, section_ref,
                    chunk_text, 1.0 AS similarity,
-                   transaction_types, entity_structures, party_roles, program_scopes
+                   transaction_types, entity_structures, party_roles, program_scopes,
+                   product_lines, loan_size_bands
             FROM sop_chunks
             WHERE section_ref ILIKE '%Collateral Requirements%'
                OR section_ref ILIKE '%> Collateral%'
@@ -1324,7 +1577,8 @@ def retrieve_for_subquestion(
             """
             SELECT id, sop_version, effective_date, page_number, section_ref,
                    chunk_text, 1.0 AS similarity,
-                   transaction_types, entity_structures, party_roles, program_scopes
+                   transaction_types, entity_structures, party_roles, program_scopes,
+                   product_lines, loan_size_bands
             FROM sop_chunks
             WHERE chunk_text ILIKE '%Source of Equity Injection%'
                OR chunk_text ILIKE '%seller-financed Note%'

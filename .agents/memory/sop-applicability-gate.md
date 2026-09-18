@@ -7,4 +7,4 @@ SOP chunks must carry structured transaction, entity, party-role, and program-sc
 
 **Why:** Similarity retrieval surfaced ESOP and partial-change provisions for ordinary 7(a) transactions, and textual entailment alone accepted them because the quoted rule was paraphrased correctly despite its trigger not matching the facts.
 
-**How to apply:** Treat empty tags as universal only for legacy rows that are classified on read; prefer backfilling those rows. Keep not-applicable evidence visibly distinct from unsupported and supported evidence.
+**How to apply:** Treat empty tags as universal only for legacy rows that are classified on read; prefer backfilling those rows. For indexed chunks, derive transaction/product/size scope from the nearest heading, with Appendix 15's explicit change-of-ownership default as the exception. Evaluate internal numeric/entity conditions in code after tag filtering, and keep not-applicable evidence visibly distinct from unsupported and supported evidence.

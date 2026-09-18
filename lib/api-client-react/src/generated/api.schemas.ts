@@ -106,7 +106,8 @@ export interface SopQueryResult {
   date_warning: string | null;
   subanswers: SopSubanswer[];
   other_issues: SopProposition[];
-  sources: SopSource[];
+  sources?: SopSource[];
+  provisions_to_read?: SopSource[];
 }
 
 export interface ApiError {

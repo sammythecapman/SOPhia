@@ -189,9 +189,10 @@ def ingest(chunks: list[dict[str, str]], version: str, effective_date: str | Non
                         """
                         INSERT INTO sop_chunks
                             (sop_version, section_ref, chunk_text, effective_date, page_number,
-                             transaction_types, entity_structures, party_roles, program_scopes,
+                            transaction_types, entity_structures, party_roles, program_scopes,
+                            product_lines, loan_size_bands,
                              embedding)
-                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                         ON CONFLICT (sop_version, section_ref, chunk_hash)
                         DO UPDATE SET embedding = EXCLUDED.embedding
                         """,
@@ -205,6 +206,8 @@ def ingest(chunks: list[dict[str, str]], version: str, effective_date: str | Non
                             item["entity_structures"],
                             item["party_roles"],
                             item["program_scopes"],
+                            item["product_lines"],
+                            item["loan_size_bands"],
                             embedding,
                         ),
                     )

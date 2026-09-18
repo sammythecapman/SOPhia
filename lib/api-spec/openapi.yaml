@@ -233,6 +233,10 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/SopSource"
+        provisions_to_read:
+          type: array
+          items:
+            $ref: "#/components/schemas/SopSource"
       required:
         - answer
         - summary
@@ -243,6 +247,7 @@ components:
         - subanswers
         - other_issues
         - sources
+         - provisions_to_read
     ApiError:
       type: object
       properties:
