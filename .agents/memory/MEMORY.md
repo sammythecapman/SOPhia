@@ -2,6 +2,8 @@
 - [SOP answer provider](sop-answer-provider.md) — use the working OpenAI chat path unless Anthropic is configured with a workspace-scoped credential.
 - [SOP numeric validation](sop-numeric-validation.md) — parse word percentages and explicit multiplication expressions before suppressing numeric claims.
 - [SOP applicability gate](sop-applicability-gate.md) — filter scoped provisions by structured fact-pattern tags before generation and entailment auditing.
+- [SOP issue relevance](sop-issue-relevance.md) — audit claims against both the validated source issue and the requested discrete sub-question.
+- [SOP guarantor enumeration](sop-guarantor-enumeration.md) — enumerate party/capacity/provision tuples and keep unmatched tuples explicitly unresolved.
 - [SOP stage diagnostics](sop-stage-diagnostics.md) — preserve per-chunk gate, synthesizer, routing, and row-citation telemetry so downstream failures are traceable.
 - [Psycopg SQL literals](psycopg-sql-literals.md) — escape percent signs as `%%` in parameterized SQL string literals.
 - [Shared rate limiting](shared-rate-limiting.md) — process-local counters are insufficient when production runs multiple workers.
