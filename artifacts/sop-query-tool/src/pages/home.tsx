@@ -25,7 +25,7 @@ function SophiaMark() {
   return (
     <svg
       aria-label="SOPhia"
-      className="h-5 w-5"
+      className="h-6 w-6"
       role="img"
       viewBox="0 0 32 32"
       fill="none"
@@ -33,19 +33,19 @@ function SophiaMark() {
     >
       <title>SOPhia</title>
       <path
-        d="M23.8 8.1C20.1 5.1 12.1 5.6 9.2 9.1c-2.9 3.6.4 6.5 5.9 7.8 5.5 1.3 8.4 3.4 7 7.2-1.4 3.8-9.8 5.5-15.2.8"
+        d="M24.5 5.8C20.6 3.5 12.5 5.8 8.9 11.8 5 18.5 8.3 24.5 14.9 25c6.6.4 10.1-6.4 9.4-12.6-.6-4.7 1.2-8.2 4-8.3 1.4-.1 1.5.9.5 2.2-3.1 4.1-10.9 9.5-16.5 14.2C8.1 24 6.7 27.5 6.2 30.1"
         stroke="currentColor"
-        strokeWidth="2.8"
+        strokeWidth="2.15"
         strokeLinecap="round"
         strokeLinejoin="round"
       />
       <path
-        d="M12.2 7.6c-1.6 1.3-2.4 2.7-2.4 4.2M19.7 21.1c-.8 1.2-2 2.2-3.5 2.8"
+        d="M28.7 6.3C25.6 10.4 17.8 15.8 12.2 20.5"
         stroke="currentColor"
-        strokeWidth="1.35"
+        strokeWidth="0.95"
         strokeLinecap="round"
-        opacity=".75"
       />
+      <circle cx="12.5" cy="17.7" r="1.35" fill="currentColor" />
     </svg>
   );
 }
