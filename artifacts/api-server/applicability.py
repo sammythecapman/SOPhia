@@ -219,7 +219,10 @@ def classify_text(text: str, section_ref: str = "") -> dict[str, list[str]]:
     # For indexed chunks, product and size scope comes from the nearest
     # heading. Body text may cross-reference other products without governing
     # them. Questions, by contrast, are classified from the full fact pattern.
-    product_source = nearest_heading if section_ref else lower
+    # Product-specific chapters are identified by their breadcrumb ancestry,
+    # not only by the leaf heading. A CAPLines leaf such as "Underwriting"
+    # must retain the CAPLines scope from its parent chapter.
+    product_source = section_lower if section_ref else lower
     if re.search(r"sba\s+express", product_source):
         _add(tags["product_lines"], "sba_express")
     if re.search(r"7\s*\(\s*a\s*\)\s+small|7a\s+small", product_source):
@@ -232,7 +235,14 @@ def classify_text(text: str, section_ref: str = "") -> dict[str, list[str]]:
         _add(tags["product_lines"], "caplines")
     if re.search(r"\bmarc\b", product_source):
         _add(tags["product_lines"], "marc")
-    if is_504 and not is_esop:
+    is_504_product = bool(
+        re.search(
+            r"section\s+c\.\s*504|chapter\s+\d+:\s*504\b|"
+            r"program-specific requirements\s*>\s*504\b",
+            product_source,
+        )
+    )
+    if (is_504 or is_504_product) and not is_esop:
         _add(tags["product_lines"], "504")
     if (
         not section_ref
@@ -338,9 +348,11 @@ def applicability_check(
         source_label = ", ".join(labels.get(value, value) for value in source_values)
         if fact_values:
             fact_label = ", ".join(labels.get(value, value) for value in fact_values)
+            dimension_label = dimension.removesuffix("_types").replace("_", " ")
             return (
                 False,
-                f"provision governs {source_label}; the facts indicate {fact_label}",
+                f"{dimension_label} mismatch: provision governs {source_label}; "
+                f"the facts indicate {fact_label}",
             )
         return (
             False,

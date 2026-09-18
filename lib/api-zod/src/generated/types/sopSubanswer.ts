@@ -10,8 +10,10 @@ import type { SopProposition } from './sopProposition';
 import type { SopSource } from './sopSource';
 import type { SopSubanswerGateTelemetryItem } from './sopSubanswerGateTelemetryItem';
 import type { SopSubanswerSupportStatus } from './sopSubanswerSupportStatus';
+import type { SopSubanswerSynthesizerTelemetry } from './sopSubanswerSynthesizerTelemetry';
 
 export interface SopSubanswer {
+  subquestion_id: string;
   question: string;
   answer: string;
   applied_conclusion: SopProposition | null;
@@ -24,4 +26,5 @@ export interface SopSubanswer {
   propositions: SopProposition[];
   guarantor_rows: SopGuarantorRow[];
   gate_telemetry: SopSubanswerGateTelemetryItem[];
+  synthesizer_telemetry: SopSubanswerSynthesizerTelemetry;
 }

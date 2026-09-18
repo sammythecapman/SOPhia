@@ -164,6 +164,8 @@ components:
     SopSubanswer:
       type: object
       properties:
+        subquestion_id:
+          type: string
         question:
           type: string
         answer:
@@ -200,7 +202,11 @@ components:
           items:
             type: object
             additionalProperties: true
+        synthesizer_telemetry:
+          type: object
+          additionalProperties: true
       required:
+        - subquestion_id
         - question
         - answer
         - applied_conclusion
@@ -212,6 +218,7 @@ components:
         - propositions
         - guarantor_rows
         - gate_telemetry
+        - synthesizer_telemetry
     SopQueryResult:
       type: object
       properties:

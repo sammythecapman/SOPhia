@@ -18,3 +18,4 @@ export * from './sopSourceApplicabilityStatus';
 export * from './sopSubanswer';
 export * from './sopSubanswerGateTelemetryItem';
 export * from './sopSubanswerSupportStatus';
+export * from './sopSubanswerSynthesizerTelemetry';

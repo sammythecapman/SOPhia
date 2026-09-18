@@ -125,8 +125,14 @@ def source_tags(source: RetrievedSource) -> dict[str, list[str]]:
         dimension: list(getattr(source, dimension))
         for dimension in APPLICABILITY_DIMENSIONS
     }
-    if not any(tags.values()):
-        return classify_text(source.chunk_text, source.section_ref)
+    # Repair missing dimensions from the breadcrumb without replacing
+    # explicitly indexed metadata. This is especially important for product
+    # chapters: a CAPLines/MARC/etc. breadcrumb is an affirmative product
+    # scope, not an unknown universal provision.
+    inferred = classify_text(source.chunk_text, source.section_ref)
+    for dimension in APPLICABILITY_DIMENSIONS:
+        if not tags[dimension] and inferred[dimension]:
+            tags[dimension] = inferred[dimension]
     return tags
 
 
@@ -136,16 +142,28 @@ def source_applicability(
     return applicability_check(source_tags(source), fact_tags)
 
 
-def internal_conditions_check(
+def internal_conditions_evaluation(
     source: RetrievedSource, fact_text: str, fact_tags: dict[str, list[str]]
-) -> tuple[bool, str | None]:
+) -> tuple[bool, str | None, list[dict[str, Any]]]:
     """Evaluate explicit conditions in a provision against the supplied facts."""
 
     lower = source.chunk_text.casefold()
     facts_lower = fact_text.casefold()
+    checks: list[dict[str, Any]] = []
+
+    def unresolved(condition: str, detail: str) -> None:
+        checks.append({"condition": condition, "status": "unresolved", "detail": detail})
+
+    def passed(condition: str, detail: str) -> None:
+        checks.append({"condition": condition, "status": "passed", "detail": detail})
+
+    def failed(condition: str, detail: str) -> tuple[bool, str | None, list[dict[str, Any]]]:
+        checks.append({"condition": condition, "status": "failed", "detail": detail})
+        return False, detail, checks
 
     if re.search(r"non[-\s]?controlling minority equity investment", lower):
         ownership_mentions = _percent_mentions(fact_text)
+        ownership_checked = False
         for label, value in ownership_mentions:
             if value >= 20 and label in {
                 "profit sharing plan",
@@ -156,14 +174,32 @@ def internal_conditions_check(
                 "seller",
                 "selling owner",
             }:
-                return (
-                    False,
+                ownership_checked = True
+                return failed(
+                    "minority investor ownership below 20%",
                     f"requires the investor to hold less than 20%; the {label} holds {value:g} percent",
                 )
+        if ownership_mentions and not ownership_checked:
+            passed(
+                "minority investor ownership below 20%",
+                "stated ownership percentages are below the 20% threshold",
+            )
+        else:
+            unresolved(
+                "minority investor ownership below 20%",
+                "no applicable investor ownership percentage was stated",
+            )
         if re.search(r"\bcontrol(?:ling)?\b|\bcontrol\b", facts_lower) and not re.search(
             r"no control|without control|not control", facts_lower
         ):
-            return False, "requires the investor to exert no control; the facts state control"
+            return failed(
+                "investor must exert no control",
+                "requires the investor to exert no control; the facts state control",
+            )
+        if re.search(r"no control|without control|not control", facts_lower):
+            passed("investor must exert no control", "facts expressly state no control")
+        else:
+            unresolved("investor must exert no control", "control was not stated")
 
     if re.search(
         r"see\s+appendix\s+15|for\s+changes?\s+of\s+ownership.{0,80}appendix\s+15",
@@ -176,9 +212,14 @@ def internal_conditions_check(
             "multi_step_change_of_ownership",
         }
     ):
-        return (
-            False,
+        return failed(
+            "change-of-ownership routing",
             "redirects change-of-ownership transactions to Appendix 15",
+        )
+    elif re.search(r"see\s+appendix\s+15|for\s+changes?\s+of\s+ownership.{0,80}appendix\s+15", lower):
+        unresolved(
+            "change-of-ownership routing",
+            "the facts do not affirmatively identify a change-of-ownership transaction",
         )
 
     if re.search(r"new\s+(?:business|borrower)|\bstart[-\s]?up\b", lower):
@@ -188,13 +229,27 @@ def internal_conditions_check(
             r"\bnot\s+(?:a\s+)?start[-\s]?up\b",
             facts_lower,
         ):
-            return False, "requires a startup or new-business fact; the facts identify an existing business"
+            return failed(
+                "startup or new-business requirement",
+                "requires a startup or new-business fact; the facts identify an existing business",
+            )
+        unresolved(
+            "startup or new-business requirement",
+            "startup status was not affirmatively established",
+        )
 
     if re.search(r"new\s+c\s*corp(?:oration)?|c\s*corporation", lower):
         if re.search(r"\bllc\b|limited liability company|s\s*corp", facts_lower) and not re.search(
             r"\bc\s*corp(?:oration)?\b", facts_lower
         ):
-            return False, "requires a C corporation; the facts identify a different entity form"
+            return failed(
+                "C corporation entity form",
+                "requires a C corporation; the facts identify a different entity form",
+            )
+        unresolved(
+            "C corporation entity form",
+            "the entity form was not affirmatively stated as a conflicting form",
+        )
 
     # Loan-size conditions are only evaluated for chunks that were indexed as
     # size-banded provisions. Generic guaranty text can mention dollar amounts
@@ -211,10 +266,17 @@ def internal_conditions_check(
                 f"{maximum.group(1)}{maximum.group(2) or ''}"
             )
             if limit is not None and amount > limit:
-                return (
-                    False,
+                return failed(
+                    "loan amount maximum",
                     f"requires a loan amount no greater than ${limit:,.0f}; the facts state ${amount:,.0f}",
                 )
+            if limit is not None:
+                passed(
+                    "loan amount maximum",
+                    f"stated amount ${amount:,.0f} is within the ${limit:,.0f} maximum",
+                )
+        elif source.loan_size_bands:
+            unresolved("loan amount maximum", "loan amount or maximum was not parseable")
         minimum = re.search(
             r"(?:greater\s+than|more\s+than|over|at\s+least)\s+\$?\s*"
             r"([\d,]+(?:\.\d+)?)\s*(mm|m|million|k|thousand)?",
@@ -225,12 +287,26 @@ def internal_conditions_check(
                 f"{minimum.group(1)}{minimum.group(2) or ''}"
             )
             if limit is not None and amount <= limit:
-                return (
-                    False,
+                return failed(
+                    "loan amount minimum",
                     f"requires a loan amount over ${limit:,.0f}; the facts state ${amount:,.0f}",
                 )
+            if limit is not None:
+                passed(
+                    "loan amount minimum",
+                    f"stated amount ${amount:,.0f} exceeds the ${limit:,.0f} minimum",
+                )
+        elif source.loan_size_bands:
+            unresolved("loan amount minimum", "loan amount or minimum was not parseable")
 
-    return True, None
+    return True, None, checks
+
+
+def internal_conditions_check(
+    source: RetrievedSource, fact_text: str, fact_tags: dict[str, list[str]]
+) -> tuple[bool, str | None]:
+    result, reason, _ = internal_conditions_evaluation(source, fact_text, fact_tags)
+    return result, reason
 
 
 def fallback_plan(question: str) -> list[dict[str, Any]]:
@@ -479,14 +555,25 @@ def deterministic_guarantor_rows(
     if not GUARANTY_TERMS.search(combined):
         return []
 
+    general_guaranty_sources = [
+        source
+        for source in sources
+        if re.search(r"guarant", source.section_ref, re.IGNORECASE)
+    ]
+    threshold_sources = general_guaranty_sources or sources
     threshold_rule = source_citation_for_phrase(
-        sources,
+        threshold_sources,
         "Any individual who has direct and/or indirect ownership of 20% or more",
-    ) or source_citation_for_terms(sources, ["20%", "guarant"])
+    ) or source_citation_for_terms(
+        threshold_sources, ["individual", "guarant"]
+    ) or source_citation_for_terms(threshold_sources, ["guarant"])
     sponsor_rule = source_citation_for_phrase(
         sources, "Obtain the full unconditional guaranty of the sponsor"
     ) or source_citation_for_terms(sources, ["sponsor", "guarant"])
-    trust_rule = source_citation_for_terms(sources, ["trust", "guarant"])
+    trust_rule = (
+        source_citation_for_terms(threshold_sources, ["trust", "guarant"])
+        or source_citation_for_terms(threshold_sources, ["guarant"])
+    )
     retained_seller_rule = source_citation_for_terms(
         sources, ["seller", "full", "guarant"]
     )
@@ -531,6 +618,7 @@ def deterministic_guarantor_rows(
     mentions = _percent_mentions(combined)
     ownership_by_label = dict(mentions)
     buyer_value = ownership_by_label.get("buyer")
+    is_robs = bool(re.search(r"\brobs\b|401\s*\(\s*k\s*\)|retirement trust", lower))
     for label, value in mentions:
         if label in {"profit sharing plan", "retirement trust", "plan"}:
             continue
@@ -555,8 +643,15 @@ def deterministic_guarantor_rows(
             )
             continue
         if value >= 20:
+            party_label = label
+            if label == "individual" and is_robs:
+                party_label = (
+                    "buyer"
+                    if re.search(r"\bbuyer\b", lower)
+                    else "buyer (individual)"
+                )
             add_row(
-                party=f"the {label}",
+                party=f"the {party_label}",
                 capacity="direct owner",
                 ownership=value,
                 comparison=f"{value:g} percent, which is at or above the 20 percent threshold.",
@@ -605,12 +700,15 @@ def deterministic_guarantor_rows(
             citation=trust_rule or threshold_rule,
         )
 
-    is_robs = bool(re.search(r"\brobs\b|401\s*\(\s*k\s*\)|retirement trust", lower))
     has_individual = bool(re.search(r"\bindividual\b", lower))
     if is_robs and has_individual:
         sponsor_party = "the corporation" if re.search(
             r"corporation.{0,35}plan sponsor|plan sponsor.{0,35}corporation", lower
-        ) else "the individual"
+        ) else (
+            "the buyer"
+            if re.search(r"\bbuyer\b", lower)
+            else "the buyer (individual)"
+        )
         if sponsor_rule:
             add_row(
                 party=sponsor_party,
@@ -629,7 +727,7 @@ def deterministic_guarantor_rows(
         trustee_rule = trustee_rule or sponsor_rule or threshold_rule
         if re.search(r"plan participant|participant", lower) and participant_rule:
             add_row(
-                party="the individual",
+                party=sponsor_party,
                 capacity="plan participant",
                 ownership=None,
                 comparison=None,
@@ -640,7 +738,7 @@ def deterministic_guarantor_rows(
             )
         if re.search(r"trustee", lower) and trustee_rule:
             add_row(
-                party="the individual",
+                party=sponsor_party,
                 capacity="trustee",
                 ownership=None,
                 comparison=None,
@@ -797,6 +895,40 @@ def deterministic_applied_conclusion(
     return None
 
 
+def fallback_applied_conclusion(
+    sources: list[RetrievedSource],
+    propositions: list[dict[str, Any]] | None = None,
+    guarantor_rows: list[dict[str, Any]] | None = None,
+) -> dict[str, Any] | None:
+    """Keep an admitted sub-question substantive when the model returns null."""
+    citations: list[dict[str, Any]] = []
+    text = ""
+    if guarantor_rows:
+        citations = guarantor_rows[0].get("citations", [])
+        text = (
+            "The admitted SOP provisions require the guaranty obligations "
+            "reflected in the party-and-capacity table below."
+        )
+    elif propositions:
+        citations = propositions[0].get("citations", [])
+        text = (
+            "Applied to the stated facts, the controlling admitted SOP provision "
+            f"supports this conclusion: {propositions[0].get('text', '')}"
+        )
+    elif sources:
+        citation = build_citation(
+            sources[0], citation_preview(sources[0].chunk_text), False
+        )
+        citations = [citation]
+        text = (
+            "The highest-ranked admitted SOP provision applies to this "
+            f"sub-question and states: {citation['quote']}"
+        )
+    if not text or not citations:
+        return None
+    return {"text": text, "citations": citations}
+
+
 def require_env() -> None:
     missing = [key for key in ("DATABASE_URL", "OPENAI_API_KEY") if not os.getenv(key)]
     if missing:
@@ -883,6 +1015,7 @@ def query_sop():
         applicable_source_pool: dict[int, RetrievedSource] = {}
         standard_product_assumed = False
         for index, (item, db_ids) in enumerate(zip(plan, subquestion_sources)):
+            subquestion_id = f"subquestion-{index + 1}"
             context_sources = [
                 source_by_db_id[db_id]
                 for db_id in db_ids
@@ -921,19 +1054,26 @@ def query_sop():
                         break
                 applicable, reason = source_applicability(source, fact_tags)
                 telemetry = {
+                    "subquestion_id": subquestion_id,
                     "chunk_id": source.db_id,
                     "source_id": source.source_id,
+                    "breadcrumb": source.section_ref,
+                    "page": source.page_number,
                     "tags": tags,
                     "fact_pattern": fact_tags,
+                    "fact_values": fact_tags,
                     "excluded_dimension": excluded_dimension,
-                    "conditions": "not_checked",
+                    "conditions": [],
+                    "condition_result": "not_checked",
                     "result": "excluded" if not applicable else "admitted",
+                    "reached_applied_conclusion": False,
                 }
                 if applicable:
-                    conditions_ok, condition_reason = internal_conditions_check(
+                    conditions_ok, condition_reason, condition_details = internal_conditions_evaluation(
                         source, fact_text, fact_tags
                     )
-                    telemetry["conditions"] = (
+                    telemetry["conditions"] = condition_details
+                    telemetry["condition_result"] = (
                         "passed" if conditions_ok else "failed"
                     )
                     if conditions_ok:
@@ -956,12 +1096,27 @@ def query_sop():
                     "SOP applicability gate: %s",
                     json.dumps(telemetry, sort_keys=True),
                 )
+            synthesizer_input = {
+                "subquestion_id": subquestion_id,
+                "question": item["question"],
+                "material_facts": list(dict.fromkeys([question, *item.get("material_facts", [])])),
+                "admitted_source_ids": [source.source_id for source in applicable_sources],
+                "admitted_context": [
+                    {
+                        "source_id": source.source_id,
+                        "breadcrumb": source.section_ref,
+                        "page": source.page_number,
+                    }
+                    for source in applicable_sources
+                ],
+            }
             generated = generate_propositions(
                 client,
                 question,
                 item["question"],
                 list(dict.fromkeys([question, *item.get("material_facts", [])])),
                 applicable_sources,
+                subquestion_id,
             )
             deterministic_conclusion = deterministic_applied_conclusion(
                 question,
@@ -987,14 +1142,24 @@ def query_sop():
                 generated["applied_conclusion"] = {"text": "", "citations": []}
             subanswers.append(
                 {
+                    "subquestion_id": subquestion_id,
                     "question": item["question"],
                     "generated": generated,
                     "candidate_index": index,
                     "search_terms": item.get("search_terms", []),
                     "sources_available": bool(applicable_sources),
+                    "admitted_source_ids": [
+                        source.source_id for source in applicable_sources
+                    ],
                     "inapplicable_sources": inapplicable_sources,
                     "fact_tags": fact_tags,
                     "gate_telemetry": gate_telemetry,
+                    "synthesizer_telemetry": {
+                        "subquestion_id": subquestion_id,
+                        "received": synthesizer_input,
+                        "returned": generated,
+                        "reached_applied_conclusion": False,
+                    },
                 }
             )
             numeric_reference = "\n".join(
@@ -1070,13 +1235,26 @@ def query_sop():
             pooled_rows = deterministic_guarantor_rows(
                 question, question, pooled_sources
             )
-            guarantor_subanswer_index = next(
-                (
-                    index
-                    for index, item in enumerate(plan)
-                    if GUARANTY_TERMS.search(item["question"])
-                ),
-                0,
+            def guaranty_route_score(item: dict[str, Any]) -> int:
+                text = item["question"]
+                score = 0
+                if re.search(
+                    r"guarant(?:y|ee|ies|or)|who\s+must\s+(?:sign|provide)|"
+                    r"which\s+(?:person|party|entity).{0,30}(?:sign|guarant)",
+                    text,
+                    re.IGNORECASE,
+                ):
+                    score += 3
+                if re.search(r"ownership|trustee|plan sponsor|participant", text, re.I):
+                    score += 1
+                if re.search(r"equity injection|distribution|rollover funds", text, re.I):
+                    score -= 2
+                return score
+
+            guarantor_subanswer_index = max(
+                range(len(plan)),
+                key=lambda plan_index: guaranty_route_score(plan[plan_index]),
+                default=0,
             )
             pooled_source_ids = [source.source_id for source in pooled_sources]
             for row in pooled_rows:
@@ -1100,14 +1278,87 @@ def query_sop():
         for candidate_index, candidate in enumerate(validated_candidates):
             if candidate.get("deterministic") and candidate["kind"] == "guarantor_row":
                 audit_results[candidate_index] = True
+        # An admitted sub-question may have useful audited propositions or
+        # guarantor rows even when the model's conclusion object was empty or
+        # failed audit. Preserve a substantive applied conclusion instead of
+        # rendering the null state; the fallback is itself telemetry-visible.
+        for index, item in enumerate(subanswers):
+            if not item["sources_available"]:
+                continue
+            has_supported_conclusion = any(
+                candidate["kind"] == "conclusion"
+                and candidate["subanswer_index"] == index
+                and audit_results.get(candidate_index, False)
+                for candidate_index, candidate in enumerate(validated_candidates)
+            )
+            if has_supported_conclusion:
+                continue
+            supported_props = [
+                candidate
+                for candidate_index, candidate in enumerate(validated_candidates)
+                if candidate["kind"] == "proposition"
+                and candidate["subanswer_index"] == index
+                and audit_results.get(candidate_index, False)
+            ]
+            supported_rows = [
+                candidate["row"]
+                for candidate_index, candidate in enumerate(validated_candidates)
+                if candidate["kind"] == "guarantor_row"
+                and candidate["subanswer_index"] == index
+                and audit_results.get(candidate_index, False)
+            ]
+            fallback = fallback_applied_conclusion(
+                [
+                    source
+                    for source in sources
+                    if source.source_id in item["admitted_source_ids"]
+                ],
+                supported_props,
+                supported_rows,
+            )
+            if fallback is None:
+                admitted_sources = [
+                    source
+                    for source in sources
+                    if source.source_id in item["admitted_source_ids"]
+                ]
+                fallback = fallback_applied_conclusion(admitted_sources)
+            if fallback is not None:
+                fallback_candidate = {
+                    "kind": "conclusion",
+                    "subanswer_index": index,
+                    "text": fallback["text"],
+                    "citations": [
+                        citation for citation in fallback["citations"]
+                    ],
+                    "numeric_reference": question,
+                    "deterministic": True,
+                    "applicable_source_ids": [
+                        source.source_id for source in sources
+                    ],
+                    "arithmetic_valid": True,
+                }
+                validated_candidates.append(fallback_candidate)
+                audit_results[len(validated_candidates) - 1] = True
         supported_candidates = [
             candidate
             for index, candidate in enumerate(validated_candidates)
             if audit_results.get(index, False)
         ]
         for candidate in supported_candidates:
+            hydrated_citations = []
             for citation in candidate["citations"]:
-                citation["supports_conclusion"] = True
+                source = source_by_id.get(citation.get("source_id"))
+                quote = citation.get("quote")
+                if source is None or not isinstance(quote, str):
+                    continue
+                located_quote = find_verbatim_quote(quote, source.chunk_text)
+                if located_quote is None:
+                    continue
+                hydrated_citations.append(
+                    build_citation(source, located_quote, True)
+                )
+            candidate["citations"] = hydrated_citations
 
         rendered_subanswers = []
         all_citations: list[dict[str, Any]] = []
@@ -1136,6 +1387,7 @@ def query_sop():
             if conclusion_candidates:
                 candidate = conclusion_candidates[0]
                 applied_conclusion = {
+                    "artifact_subquestion_id": item["subquestion_id"],
                     "text": candidate["text"],
                     "citations": candidate["citations"],
                     "arithmetic_valid": candidate.get("arithmetic_valid", True),
@@ -1171,14 +1423,11 @@ def query_sop():
                 else ""
             )
             guarantor_rows: list[dict[str, Any]] = []
-            if row_candidates:
-                # The table is the authoritative enumeration; do not repeat its
-                # conclusion in prose above it.
-                applied_conclusion = None
             if applied_conclusion or row_candidates:
                 support_status = "supported"
                 propositions = [
                     {
+                        "artifact_subquestion_id": item["subquestion_id"],
                         "text": candidate["text"],
                         "citations": candidate["citations"],
                         "arithmetic_valid": candidate.get("arithmetic_valid", True),
@@ -1204,8 +1453,28 @@ def query_sop():
                         row.get("ownership_percentage"),
                     )
                     if row_key in seen_guarantor_rows:
+                        existing_row = next(
+                            (
+                                existing
+                                for existing in guarantor_rows
+                                if (
+                                    existing.get("party", ""),
+                                    existing.get("capacity", ""),
+                                    existing.get("ownership_percentage"),
+                                )
+                                == row_key
+                            ),
+                            None,
+                        )
+                        if existing_row is not None:
+                            existing_row["citations"] = dedupe_citations(
+                                existing_row.get("citations", [])
+                                + candidate["citations"]
+                            )
+                            all_citations.extend(candidate["citations"])
                         continue
                     seen_guarantor_rows.add(row_key)
+                    row["artifact_subquestion_id"] = item["subquestion_id"]
                     row["citations"] = candidate["citations"]
                     guarantor_rows.append(row)
                     all_citations.extend(candidate["citations"])
@@ -1240,8 +1509,21 @@ def query_sop():
                 no_provision = True
                 support_note = answer
                 guarantor_rows = []
+            for telemetry in item["gate_telemetry"]:
+                telemetry["reached_applied_conclusion"] = bool(
+                    applied_conclusion or row_candidates
+                )
+            item["synthesizer_telemetry"]["returned"] = {
+                **item["generated"],
+                "final_applied_conclusion": applied_conclusion,
+                "final_support_status": support_status,
+            }
+            item["synthesizer_telemetry"]["reached_applied_conclusion"] = bool(
+                applied_conclusion or row_candidates
+            )
             rendered_subanswers.append(
                 {
+                    "subquestion_id": item["subquestion_id"],
                     "question": item["question"],
                     "answer": answer,
                     "no_provision": no_provision,
@@ -1253,6 +1535,7 @@ def query_sop():
                     "searched_terms": item["search_terms"],
                     "rejected_citations": rejected_conclusion_citations,
                     "gate_telemetry": item["gate_telemetry"],
+                    "synthesizer_telemetry": item["synthesizer_telemetry"],
                 }
             )
             all_citations.extend(rejected_conclusion_citations)
@@ -1642,8 +1925,29 @@ def generate_propositions(
     subquestion: str,
     material_facts: list[str],
     sources: list[RetrievedSource],
+    subquestion_id: str = "subquestion-unknown",
 ) -> dict[str, Any]:
     context = format_context(sources)
+    synthesizer_input = {
+        "subquestion_id": subquestion_id,
+        "original_question": original_question,
+        "subquestion": subquestion,
+        "material_facts": material_facts,
+        "admitted_source_ids": [source.source_id for source in sources],
+        "context": [
+            {
+                "source_id": source.source_id,
+                "breadcrumb": source.section_ref,
+                "page": source.page_number,
+                "text": source.chunk_text,
+            }
+            for source in sources
+        ],
+    }
+    app.logger.info(
+        "SOP conclusion synthesizer input: %s",
+        json.dumps(synthesizer_input, sort_keys=True),
+    )
     response = client.chat.completions.create(
         model=ANSWER_MODEL,
         max_tokens=1800,
@@ -1805,7 +2109,7 @@ def generate_propositions(
         },
     )
     result = parse_json(response.choices[0].message.content or "")
-    return {
+    returned = {
         "applied_conclusion": result.get(
             "applied_conclusion", {"text": "", "citations": []}
         ),
@@ -1813,6 +2117,14 @@ def generate_propositions(
         "other_issues": result.get("other_issues", []),
         "guarantor_rows": result.get("guarantor_rows", []),
     }
+    app.logger.info(
+        "SOP conclusion synthesizer output: %s",
+        json.dumps(
+            {"subquestion_id": subquestion_id, "returned": returned},
+            sort_keys=True,
+        ),
+    )
+    return returned
 
 
 def validate_candidate_citations(

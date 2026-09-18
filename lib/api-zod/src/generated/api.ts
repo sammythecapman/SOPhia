@@ -37,6 +37,7 @@ export const QuerySopResponse = zod.object({
   "date_warning": zod.string().nullable(),
   "assumptions": zod.array(zod.string()),
   "subanswers": zod.array(zod.object({
+  "subquestion_id": zod.string(),
   "question": zod.string(),
   "answer": zod.string(),
   "applied_conclusion": zod.union([zod.object({
@@ -117,7 +118,8 @@ export const QuerySopResponse = zod.object({
   "verified": zod.boolean()
 }))
 })),
-  "gate_telemetry": zod.array(zod.record(zod.string(), zod.unknown()))
+  "gate_telemetry": zod.array(zod.record(zod.string(), zod.unknown())),
+  "synthesizer_telemetry": zod.record(zod.string(), zod.unknown())
 })),
   "other_issues": zod.array(zod.object({
   "text": zod.string(),

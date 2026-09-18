@@ -19,6 +19,113 @@ def query(base_url: str, question: str) -> dict:
         return json.load(response)
 
 
+def baseline_regression_failures(result: dict) -> list[str]:
+    """Blocking assertions for the baseline ROBS fact pattern."""
+    failures: list[str] = []
+    summary = (result.get("summary") or "").strip()
+    if not summary or "no applied conclusion was established" in summary.casefold():
+        failures.append("empty or generic bottom line")
+
+    subanswers = result.get("subanswers", [])
+    for subanswer in subanswers:
+        telemetry = subanswer.get("gate_telemetry", [])
+        admitted = any(entry.get("result") == "admitted" for entry in telemetry)
+        conclusion = subanswer.get("applied_conclusion") or {}
+        if admitted and not conclusion.get("text", "").strip():
+            failures.append(
+                f"{subanswer.get('subquestion_id', subanswer.get('question'))}: empty applied conclusion"
+            )
+        subquestion_id = subanswer.get("subquestion_id")
+        artifacts = []
+        if conclusion:
+            artifacts.append(conclusion)
+        artifacts.extend(subanswer.get("propositions", []))
+        artifacts.extend(subanswer.get("guarantor_rows", []))
+        for artifact in artifacts:
+            if artifact.get("artifact_subquestion_id") != subquestion_id:
+                failures.append(
+                    f"artifact routed outside {subquestion_id or subanswer.get('question')}"
+                )
+        for entry in telemetry:
+            required = {
+                "chunk_id",
+                "breadcrumb",
+                "page",
+                "tags",
+                "fact_values",
+                "excluded_dimension",
+                "conditions",
+                "condition_result",
+                "subquestion_id",
+                "reached_applied_conclusion",
+            }
+            if not required.issubset(entry):
+                failures.append("incomplete per-chunk telemetry")
+                break
+
+    admitted_pages = {
+        source.get("page_number")
+        for source in result.get("sources", [])
+        if source.get("applicability_status") == "applicable"
+    }
+    if 47 not in admitted_pages:
+        failures.append("page 47 was not admitted")
+    if 93 not in admitted_pages:
+        failures.append("page 93 was not admitted")
+
+    rejected_page_150 = [
+        source
+        for subanswer in subanswers
+        for source in subanswer.get("rejected_citations", [])
+        if source.get("page_number") == 150
+    ]
+    if not rejected_page_150:
+        failures.append("page 150 CAPLines provision was not excluded")
+    elif not any(
+        "product" in (source.get("applicability_reason") or "").casefold()
+        for source in rejected_page_150
+    ):
+        failures.append("page 150 exclusion did not identify product mismatch")
+
+    rows = [
+        row
+        for subanswer in subanswers
+        for row in subanswer.get("guarantor_rows", [])
+    ]
+    for party, capacity in [
+        ("buyer", "direct owner"),
+        ("buyer", "plan sponsor"),
+        ("buyer", "trustee"),
+        ("plan", "entity owner"),
+    ]:
+        if not any(
+            party in row.get("party", "").casefold()
+            and capacity in row.get("capacity", "").casefold()
+            for row in rows
+        ):
+            failures.append(f"missing guarantor row: {party}/{capacity}")
+    if len(rows) < 4:
+        failures.append(f"only {len(rows)} guarantor rows were produced")
+    if any(not row.get("citations") for row in rows):
+        failures.append("guarantor row lacks a triggering citation")
+    row_citation_ids = {
+        citation.get("source_id")
+        for row in rows
+        for citation in row.get("citations", [])
+    }
+    admitted_guaranty_ids = {
+        source.get("source_id")
+        for source in result.get("sources", [])
+        if source.get("applicability_status") == "applicable"
+        and (
+            source.get("page_number") in {47, 93}
+        )
+    }
+    if not admitted_guaranty_ids.issubset(row_citation_ids):
+        failures.append("an admitted guaranty provision lacks a triggering row citation")
+    return failures
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument(
@@ -40,6 +147,7 @@ def main() -> int:
     date_warning_failures = 0
     applicability_failures = 0
     guarantor_row_failures = 0
+    baseline_failures = 0
 
     for case in cases:
         result = query(args.base_url, case["question"])
@@ -135,6 +243,12 @@ def main() -> int:
                 for citation in subanswer.get("rejected_citations", [])
             )
         )
+        baseline_failure_details = (
+            baseline_regression_failures(result)
+            if case["id"] == "guarantor-enumeration-robs"
+            else []
+        )
+        baseline_failure = bool(baseline_failure_details)
 
         phantom_citations += int(phantom)
         citation_failures += int(citation_failure)
@@ -146,6 +260,7 @@ def main() -> int:
         date_warning_failures += int(date_warning_failure)
         applicability_failures += int(applicability_failure)
         guarantor_row_failures += int(row_failure or unresolved_failure)
+        baseline_failures += int(baseline_failure)
         status = "PASS" if not any(
             (
                 phantom,
@@ -160,6 +275,7 @@ def main() -> int:
                 applicability_failure,
                 row_failure,
                 unresolved_failure,
+                baseline_failure,
             )
         ) else "FAIL"
         print(
@@ -170,6 +286,11 @@ def main() -> int:
             f"negative_audit={negative_audit_failure or forbidden_section_failure} "
             f"date_warning={date_warning_failure} applicability={applicability_failure} "
             f"guarantor_rows={row_failure or unresolved_failure}"
+            + (
+                f" baseline={'; '.join(baseline_failure_details)}"
+                if baseline_failure
+                else ""
+            )
         )
 
     print(
@@ -186,6 +307,7 @@ def main() -> int:
                 "date_warning_failures": date_warning_failures,
                 "applicability_failures": applicability_failures,
                 "guarantor_row_failures": guarantor_row_failures,
+                "baseline_failures": baseline_failures,
             },
             indent=2,
         )
@@ -203,6 +325,7 @@ def main() -> int:
                 date_warning_failures,
                 applicability_failures,
                 guarantor_row_failures,
+                baseline_failures,
             )
         )
     )

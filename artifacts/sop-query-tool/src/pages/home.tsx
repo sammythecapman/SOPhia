@@ -612,6 +612,29 @@ export default function Home() {
                               <AlertDescription>{subanswer.support_note}</AlertDescription>
                             </Alert>
                           )}
+                          <details className="rounded-lg border border-border/60 bg-muted/20 px-3 py-2">
+                            <summary className="cursor-pointer text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+                              Applicability and synthesis telemetry
+                            </summary>
+                            <div className="mt-3 space-y-3">
+                              <div>
+                                <p className="mb-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                                  Per-chunk gate decisions
+                                </p>
+                                <pre className="max-h-80 overflow-auto whitespace-pre-wrap rounded-md bg-background p-3 text-[11px] leading-5 text-foreground/80">
+                                  {JSON.stringify(subanswer.gate_telemetry, null, 2)}
+                                </pre>
+                              </div>
+                              <div>
+                                <p className="mb-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                                  Conclusion synthesizer
+                                </p>
+                                <pre className="max-h-80 overflow-auto whitespace-pre-wrap rounded-md bg-background p-3 text-[11px] leading-5 text-foreground/80">
+                                  {JSON.stringify(subanswer.synthesizer_telemetry, null, 2)}
+                                </pre>
+                              </div>
+                            </div>
+                          </details>
                           {subanswer.applied_conclusion && (
                             <section className="space-y-2">
                               <h5 className="font-sans text-xs font-semibold uppercase tracking-widest text-primary">
