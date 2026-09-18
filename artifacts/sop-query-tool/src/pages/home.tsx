@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useQuerySop } from "@workspace/api-client-react";
 import type {
   SopGuarantorRow,
@@ -20,34 +20,101 @@ import {
   ShieldCheck,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
+import sophiaScriptS from "../../../../attached_assets/image_1789698258184.png";
 
 function SophiaMark() {
   return (
     <svg
       aria-label="SOPhia"
-      className="h-6 w-6"
+      className="h-7 w-7"
       role="img"
-      viewBox="0 0 32 32"
-      fill="none"
+      viewBox="105 235 245 220"
       xmlns="http://www.w3.org/2000/svg"
     >
       <title>SOPhia</title>
-      <path
-        d="M24.5 5.8C20.6 3.5 12.5 5.8 8.9 11.8 5 18.5 8.3 24.5 14.9 25c6.6.4 10.1-6.4 9.4-12.6-.6-4.7 1.2-8.2 4-8.3 1.4-.1 1.5.9.5 2.2-3.1 4.1-10.9 9.5-16.5 14.2C8.1 24 6.7 27.5 6.2 30.1"
-        stroke="currentColor"
-        strokeWidth="2.15"
-        strokeLinecap="round"
-        strokeLinejoin="round"
+      <defs>
+        <filter id="sophia-mark-invert" colorInterpolationFilters="sRGB">
+          <feComponentTransfer>
+            <feFuncR type="table" tableValues="1 0" />
+            <feFuncG type="table" tableValues="1 0" />
+            <feFuncB type="table" tableValues="1 0" />
+          </feComponentTransfer>
+        </filter>
+        <mask id="sophia-mark-mask" maskUnits="userSpaceOnUse" x="0" y="0" width="452" height="678">
+          <image
+            href={sophiaScriptS}
+            width="452"
+            height="678"
+            filter="url(#sophia-mark-invert)"
+          />
+        </mask>
+      </defs>
+      <rect
+        width="452"
+        height="678"
+        fill="currentColor"
+        mask="url(#sophia-mark-mask)"
       />
-      <path
-        d="M28.7 6.3C25.6 10.4 17.8 15.8 12.2 20.5"
-        stroke="currentColor"
-        strokeWidth="0.95"
-        strokeLinecap="round"
-      />
-      <circle cx="12.5" cy="17.7" r="1.35" fill="currentColor" />
     </svg>
   );
+}
+
+function useSophiaFavicon() {
+  useEffect(() => {
+    let cancelled = false;
+    const image = new Image();
+
+    image.onload = () => {
+      if (cancelled) return;
+
+      const markCanvas = document.createElement("canvas");
+      markCanvas.width = 52;
+      markCanvas.height = 47;
+      const markContext = markCanvas.getContext("2d");
+      if (!markContext) return;
+
+      markContext.drawImage(image, 105, 235, 245, 220, 0, 0, 52, 47);
+      const pixels = markContext.getImageData(0, 0, 52, 47);
+      for (let index = 0; index < pixels.data.length; index += 4) {
+        const luminance =
+          pixels.data[index] * 0.299 +
+          pixels.data[index + 1] * 0.587 +
+          pixels.data[index + 2] * 0.114;
+        const ink = 255 - luminance;
+        pixels.data[index] = 255;
+        pixels.data[index + 1] = 255;
+        pixels.data[index + 2] = 255;
+        pixels.data[index + 3] = ink < 10 ? 0 : Math.min(255, ink * 1.35);
+      }
+      markContext.putImageData(pixels, 0, 0);
+
+      const faviconCanvas = document.createElement("canvas");
+      faviconCanvas.width = 64;
+      faviconCanvas.height = 64;
+      const faviconContext = faviconCanvas.getContext("2d");
+      if (!faviconContext) return;
+
+      faviconContext.fillStyle = "#203D68";
+      faviconContext.beginPath();
+      faviconContext.roundRect(0, 0, 64, 64, 12);
+      faviconContext.fill();
+      faviconContext.drawImage(markCanvas, 6, 8);
+
+      let favicon = document.querySelector<HTMLLinkElement>('link[rel~="icon"]');
+      if (!favicon) {
+        favicon = document.createElement("link");
+        favicon.rel = "icon";
+        document.head.appendChild(favicon);
+      }
+      favicon.type = "image/png";
+      favicon.href = faviconCanvas.toDataURL("image/png");
+    };
+
+    image.src = sophiaScriptS;
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 }
 
 function formatDate(date: string) {
@@ -304,6 +371,7 @@ function GuarantorTable({
 }
 
 export default function Home() {
+  useSophiaFavicon();
   const [question, setQuestion] = useState("");
   const { mutate, data: result, isPending, error } = useQuerySop();
 
