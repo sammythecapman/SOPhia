@@ -373,7 +373,22 @@ function GuarantorTable({
 export default function Home() {
   useSophiaFavicon();
   const [question, setQuestion] = useState("");
+  const [authUser, setAuthUser] = useState<{ email?: string | null; name?: string | null } | null>(
+    null,
+  );
+  const [authLoaded, setAuthLoaded] = useState(false);
   const { mutate, data: result, isPending, error } = useQuerySop();
+  const authRequired = import.meta.env.PROD;
+
+  useEffect(() => {
+    fetch("/api/auth/user", { credentials: "include" })
+      .then((response) => (response.ok ? response.json() : { user: null }))
+      .then((payload: { user?: typeof authUser }) => {
+        setAuthUser(payload.user ?? null);
+        setAuthLoaded(true);
+      })
+      .catch(() => setAuthLoaded(true));
+  }, []);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -415,9 +430,39 @@ export default function Home() {
             </span>
           </div>
         </div>
+        {authRequired && authUser && (
+          <a
+            href="/api/logout?returnTo=/"
+            className="text-xs font-semibold uppercase tracking-wider text-muted-foreground hover:text-primary"
+          >
+            Sign out
+          </a>
+        )}
       </header>
 
       <main className="z-10 mx-auto flex w-full max-w-5xl flex-1 flex-col gap-8 p-6 md:p-8">
+        {authRequired && authLoaded && !authUser ? (
+          <Card className="mx-auto mt-16 w-full max-w-xl border-primary/10 shadow-lg">
+            <CardHeader>
+              <CardTitle className="font-serif text-3xl text-primary">
+                Sign in to search the SOP
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-5">
+              <p className="text-muted-foreground">
+                SOPhia is restricted to authenticated users because each query uses
+                metered language-model and corpus services.
+              </p>
+              <Button asChild className="rounded-full">
+                <a href="/api/login?returnTo=/">
+                  Continue with Replit
+                  <ArrowRight className="ml-2 h-4 w-4" />
+                </a>
+              </Button>
+            </CardContent>
+          </Card>
+        ) : (
+          <>
         <AnimatePresence>
           {!result && !isPending && (
             <motion.div
@@ -431,8 +476,8 @@ export default function Home() {
                 Ask a policy question.
               </h2>
               <p className="text-lg text-muted-foreground">
-                Search the authoritative Small Business Administration SOP 50 10 8.1
-                documentation. Every conclusion is tied to a source passage.
+                Search the Small Business Administration SOP 50 10 8.1 reference
+                corpus. Every conclusion is tied to a source passage.
               </p>
             </motion.div>
           )}
@@ -612,29 +657,32 @@ export default function Home() {
                               <AlertDescription>{subanswer.support_note}</AlertDescription>
                             </Alert>
                           )}
-                          <details className="rounded-lg border border-border/60 bg-muted/20 px-3 py-2">
-                            <summary className="cursor-pointer text-xs font-semibold uppercase tracking-widest text-muted-foreground">
-                              Applicability and synthesis telemetry
-                            </summary>
-                            <div className="mt-3 space-y-3">
-                              <div>
-                                <p className="mb-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                                  Per-chunk gate decisions
-                                </p>
-                                <pre className="max-h-80 overflow-auto whitespace-pre-wrap rounded-md bg-background p-3 text-[11px] leading-5 text-foreground/80">
-                                  {JSON.stringify(subanswer.gate_telemetry, null, 2)}
-                                </pre>
+                          {(subanswer.gate_telemetry.length > 0 ||
+                            Object.keys(subanswer.synthesizer_telemetry).length > 0) && (
+                            <details className="rounded-lg border border-border/60 bg-muted/20 px-3 py-2">
+                              <summary className="cursor-pointer text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+                                Applicability and synthesis telemetry
+                              </summary>
+                              <div className="mt-3 space-y-3">
+                                <div>
+                                  <p className="mb-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                                    Per-chunk gate decisions
+                                  </p>
+                                  <pre className="max-h-80 overflow-auto whitespace-pre-wrap rounded-md bg-background p-3 text-[11px] leading-5 text-foreground/80">
+                                    {JSON.stringify(subanswer.gate_telemetry, null, 2)}
+                                  </pre>
+                                </div>
+                                <div>
+                                  <p className="mb-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                                    Conclusion synthesizer
+                                  </p>
+                                  <pre className="max-h-80 overflow-auto whitespace-pre-wrap rounded-md bg-background p-3 text-[11px] leading-5 text-foreground/80">
+                                    {JSON.stringify(subanswer.synthesizer_telemetry, null, 2)}
+                                  </pre>
+                                </div>
                               </div>
-                              <div>
-                                <p className="mb-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                                  Conclusion synthesizer
-                                </p>
-                                <pre className="max-h-80 overflow-auto whitespace-pre-wrap rounded-md bg-background p-3 text-[11px] leading-5 text-foreground/80">
-                                  {JSON.stringify(subanswer.synthesizer_telemetry, null, 2)}
-                                </pre>
-                              </div>
-                            </div>
-                          </details>
+                            </details>
+                          )}
                           {subanswer.applied_conclusion && (
                             <section className="space-y-2">
                               <h5 className="font-sans text-xs font-semibold uppercase tracking-widest text-primary">
@@ -699,6 +747,13 @@ export default function Home() {
             </motion.div>
           )}
         </AnimatePresence>
+          <p className="mx-auto max-w-3xl text-center text-xs leading-5 text-muted-foreground">
+            For informational and workflow support only. SOPhia is not a law firm and
+            does not provide legal advice. Confirm the governing SOP edition, approval
+            date, and current SBA guidance with qualified counsel and official sources.
+          </p>
+          </>
+        )}
       </main>
     </div>
   );

@@ -8,4 +8,11 @@
 
 export interface HealthStatus {
   status: string;
+  sop_version: string;
+  effective_date: Date;
+  source_url: string;
+  /** @pattern ^[a-f0-9]{64}$ */
+  source_sha256: string;
+  /** @minimum 1 */
+  chunk_count: number;
 }

@@ -26,6 +26,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+        "503":
+          description: Corpus or required service is unavailable
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
   /sop/query:
     post:
       operationId: querySop
@@ -44,6 +50,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/SopQueryResult"
+        "401":
+          description: Authentication is required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
         "400":
           description: Invalid request
           content:
@@ -56,6 +68,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiError"
+        "429":
+          description: Rate limit exceeded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
 components:
   schemas:
     HealthStatus:
@@ -63,8 +81,27 @@ components:
       properties:
         status:
           type: string
+        sop_version:
+          type: string
+        effective_date:
+          type: string
+          format: date
+        source_url:
+          type: string
+          format: uri
+        source_sha256:
+          type: string
+          pattern: "^[a-f0-9]{64}$"
+        chunk_count:
+          type: integer
+          minimum: 1
       required:
         - status
+        - sop_version
+        - effective_date
+        - source_url
+        - source_sha256
+        - chunk_count
     SopQuestion:
       type: object
       additionalProperties: false
@@ -89,6 +126,12 @@ components:
           type: string
         effective_date:
           type: string
+        corpus_source_url:
+          type: string
+          format: uri
+        corpus_sha256:
+          type: string
+          pattern: "^[a-f0-9]{64}$"
         page_number:
           type: [integer, "null"]
         quote_located:
@@ -109,6 +152,8 @@ components:
         - source_chunk
         - source_version
         - effective_date
+        - corpus_source_url
+        - corpus_sha256
         - page_number
         - quote_located
         - supports_conclusion

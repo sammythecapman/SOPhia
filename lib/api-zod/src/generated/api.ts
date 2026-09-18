@@ -12,8 +12,17 @@ import * as zod from 'zod';
  * Returns server health status
  * @summary Health check
  */
+export const healthCheckResponseSourceSha256RegExp = new RegExp('^[a-f0-9]{64}$');
+
+
+
 export const HealthCheckResponse = zod.object({
-  "status": zod.string()
+  "status": zod.string(),
+  "sop_version": zod.string(),
+  "effective_date": zod.coerce.date(),
+  "source_url": zod.string().url(),
+  "source_sha256": zod.string().regex(healthCheckResponseSourceSha256RegExp),
+  "chunk_count": zod.number().int().min(1)
 })
 
 
@@ -27,6 +36,15 @@ export const querySopBodyQuestionMax = 4000;
 export const QuerySopBody = zod.object({
   "question": zod.string().min(1).max(querySopBodyQuestionMax)
 })
+
+export const querySopResponseSubanswersItemAppliedConclusionOneCitationsItemCorpusSha256RegExp = new RegExp('^[a-f0-9]{64}$');
+export const querySopResponseSubanswersItemRejectedCitationsItemCorpusSha256RegExp = new RegExp('^[a-f0-9]{64}$');
+export const querySopResponseSubanswersItemPropositionsItemCitationsItemCorpusSha256RegExp = new RegExp('^[a-f0-9]{64}$');
+export const querySopResponseSubanswersItemGuarantorRowsItemCitationsItemCorpusSha256RegExp = new RegExp('^[a-f0-9]{64}$');
+export const querySopResponseOtherIssuesItemCitationsItemCorpusSha256RegExp = new RegExp('^[a-f0-9]{64}$');
+export const querySopResponseSourcesItemCorpusSha256RegExp = new RegExp('^[a-f0-9]{64}$');
+export const querySopResponseProvisionsToReadItemCorpusSha256RegExp = new RegExp('^[a-f0-9]{64}$');
+
 
 export const QuerySopResponse = zod.object({
   "answer": zod.string(),
@@ -50,6 +68,8 @@ export const QuerySopResponse = zod.object({
   "source_chunk": zod.string(),
   "source_version": zod.string(),
   "effective_date": zod.string(),
+  "corpus_source_url": zod.string().url(),
+  "corpus_sha256": zod.string().regex(querySopResponseSubanswersItemAppliedConclusionOneCitationsItemCorpusSha256RegExp),
   "page_number": zod.number().int().nullable(),
   "quote_located": zod.boolean(),
   "supports_conclusion": zod.boolean(),
@@ -69,6 +89,8 @@ export const QuerySopResponse = zod.object({
   "source_chunk": zod.string(),
   "source_version": zod.string(),
   "effective_date": zod.string(),
+  "corpus_source_url": zod.string().url(),
+  "corpus_sha256": zod.string().regex(querySopResponseSubanswersItemRejectedCitationsItemCorpusSha256RegExp),
   "page_number": zod.number().int().nullable(),
   "quote_located": zod.boolean(),
   "supports_conclusion": zod.boolean(),
@@ -86,6 +108,8 @@ export const QuerySopResponse = zod.object({
   "source_chunk": zod.string(),
   "source_version": zod.string(),
   "effective_date": zod.string(),
+  "corpus_source_url": zod.string().url(),
+  "corpus_sha256": zod.string().regex(querySopResponseSubanswersItemPropositionsItemCitationsItemCorpusSha256RegExp),
   "page_number": zod.number().int().nullable(),
   "quote_located": zod.boolean(),
   "supports_conclusion": zod.boolean(),
@@ -110,6 +134,8 @@ export const QuerySopResponse = zod.object({
   "source_chunk": zod.string(),
   "source_version": zod.string(),
   "effective_date": zod.string(),
+  "corpus_source_url": zod.string().url(),
+  "corpus_sha256": zod.string().regex(querySopResponseSubanswersItemGuarantorRowsItemCitationsItemCorpusSha256RegExp),
   "page_number": zod.number().int().nullable(),
   "quote_located": zod.boolean(),
   "supports_conclusion": zod.boolean(),
@@ -131,6 +157,8 @@ export const QuerySopResponse = zod.object({
   "source_chunk": zod.string(),
   "source_version": zod.string(),
   "effective_date": zod.string(),
+  "corpus_source_url": zod.string().url(),
+  "corpus_sha256": zod.string().regex(querySopResponseOtherIssuesItemCitationsItemCorpusSha256RegExp),
   "page_number": zod.number().int().nullable(),
   "quote_located": zod.boolean(),
   "supports_conclusion": zod.boolean(),
@@ -146,6 +174,8 @@ export const QuerySopResponse = zod.object({
   "source_chunk": zod.string(),
   "source_version": zod.string(),
   "effective_date": zod.string(),
+  "corpus_source_url": zod.string().url(),
+  "corpus_sha256": zod.string().regex(querySopResponseSourcesItemCorpusSha256RegExp),
   "page_number": zod.number().int().nullable(),
   "quote_located": zod.boolean(),
   "supports_conclusion": zod.boolean(),
@@ -160,6 +190,8 @@ export const QuerySopResponse = zod.object({
   "source_chunk": zod.string(),
   "source_version": zod.string(),
   "effective_date": zod.string(),
+  "corpus_source_url": zod.string().url(),
+  "corpus_sha256": zod.string().regex(querySopResponseProvisionsToReadItemCorpusSha256RegExp),
   "page_number": zod.number().int().nullable(),
   "quote_located": zod.boolean(),
   "supports_conclusion": zod.boolean(),

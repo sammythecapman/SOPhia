@@ -3,3 +3,5 @@
 - [SOP numeric validation](sop-numeric-validation.md) — parse word percentages and explicit multiplication expressions before suppressing numeric claims.
 - [SOP applicability gate](sop-applicability-gate.md) — filter scoped provisions by structured fact-pattern tags before generation and entailment auditing.
 - [SOP stage diagnostics](sop-stage-diagnostics.md) — preserve per-chunk gate, synthesizer, routing, and row-citation telemetry so downstream failures are traceable.
+- [Psycopg SQL literals](psycopg-sql-literals.md) — escape percent signs as `%%` in parameterized SQL string literals.
+- [Shared rate limiting](shared-rate-limiting.md) — process-local counters are insufficient when production runs multiple workers.

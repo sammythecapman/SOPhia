@@ -10,7 +10,8 @@ A grounded question-answering tool for SBA SOP 50 10 8.
 - `pnpm run build` — typecheck + build all packages
 - `pnpm --filter @workspace/api-spec run codegen` — regenerate API hooks and Zod schemas from the OpenAPI spec
 - `pnpm --filter @workspace/db run push` — push DB schema changes (dev only)
-- Required env: `DATABASE_URL` — Postgres connection string
+- Required env: `DATABASE_URL`, `OPENAI_API_KEY`, and `SESSION_SECRET`
+- Production auth also requires `REPL_ID`; local development bypasses auth unless `NODE_ENV=production`
 
 ## Stack
 
@@ -26,15 +27,23 @@ A grounded question-answering tool for SBA SOP 50 10 8.
 - `artifacts/api-server/app.py` — Flask API and grounded answer pipeline
 - `artifacts/sop-query-tool/` — React frontend
 - `migrations/001_create_sop_chunks.sql` — pgvector schema
+- `migrations/006_add_corpus_metadata.sql` — edition-bound corpus metadata and SHA-256
+- `migrations/007_add_api_rate_limits.sql` — shared fixed-window rate-limit counters
 - `scripts/ingest_sop.py` — guarded DOCX ingestion
+- `scripts/run_sop_regression.py` — 28-case grounded-answer regression runner
 
 ## Architecture decisions
 
-_Populate as you build — non-obvious choices a reader couldn't infer from the code (3-5 bullets)._
+- Retrieval is bound to both the configured SOP edition and the corpus SHA-256; chunks from another edition are never mixed into an answer.
+- Production startup fails if the selected corpus metadata or chunk set is missing or inconsistent.
+- Raw stage telemetry is development-only unless `EXPOSE_DEBUG_TELEMETRY=true` is explicitly set.
+- Rate limits use PostgreSQL counters so multiple production workers share one fixed-window budget.
 
 ## Product
 
-_Describe the high-level user-facing capabilities of this app once they exist._
+SOP-hia answers SBA SOP 50 10 8.1 questions with source passages, section/page citations,
+applicability checks, guarantor rows, numeric validation, effective-date warnings, and a
+plain-language legal disclaimer. Users sign in with Replit OIDC before querying production.
 
 ## User preferences
 
@@ -42,7 +51,9 @@ _Populate as you build — explicit user instructions worth remembering across s
 
 ## Gotchas
 
-_Populate as you build — sharp edges, "always run X before Y" rules._
+- Production schema and corpus promotion happen through the Replit publish flow; do not apply production DDL or seed data ad hoc.
+- Run API-spec codegen after changing `lib/api-spec/openapi.yaml`.
+- A production regression run needs an authenticated `sophia_session` cookie; pass it through `SOP_REGRESSION_COOKIE` rather than weakening production auth.
 
 ## Pointers
 

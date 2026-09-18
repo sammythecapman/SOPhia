@@ -7,6 +7,13 @@
  */
 export interface HealthStatus {
   status: string;
+  sop_version: string;
+  effective_date: string;
+  source_url: string;
+  /** @pattern ^[a-f0-9]{64}$ */
+  source_sha256: string;
+  /** @minimum 1 */
+  chunk_count: number;
 }
 
 export interface SopQuestion {
@@ -32,6 +39,9 @@ export interface SopSource {
   source_chunk: string;
   source_version: string;
   effective_date: string;
+  corpus_source_url: string;
+  /** @pattern ^[a-f0-9]{64}$ */
+  corpus_sha256: string;
   /** @nullable */
   page_number: number | null;
   quote_located: boolean;

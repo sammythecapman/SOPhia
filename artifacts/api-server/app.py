@@ -2,6 +2,7 @@ import json
 import os
 import re
 import datetime as dt
+import math
 from dataclasses import dataclass
 from difflib import SequenceMatcher
 from typing import Any
@@ -17,14 +18,22 @@ from applicability import (
     classify_text,
     merge_tags,
 )
+from auth import configure_auth, current_user, require_auth
 from db import connection
 
 app = Flask(__name__)
+configure_auth(app)
 
 EMBEDDING_MODEL = "text-embedding-3-small"
 ANSWER_MODEL = os.getenv("OPENAI_CHAT_MODEL", "gpt-4o-mini")
 DEFAULT_SOP_VERSION = os.getenv("SOP_VERSION", "SOP 50 10 8.1")
 DEFAULT_EFFECTIVE_DATE = os.getenv("SOP_EFFECTIVE_DATE", "2026-10-01")
+EXPOSE_DEBUG_TELEMETRY = os.getenv(
+    "EXPOSE_DEBUG_TELEMETRY",
+    "true" if os.getenv("NODE_ENV", "").casefold() != "production" else "false",
+).casefold() == "true"
+RATE_LIMIT_MAX_REQUESTS = int(os.getenv("SOP_RATE_LIMIT_MAX_REQUESTS", "30"))
+RATE_LIMIT_WINDOW_SECONDS = int(os.getenv("SOP_RATE_LIMIT_WINDOW_SECONDS", "60"))
 TOP_K = 6
 MAX_CONTEXT_SOURCES = 18
 MIN_RETRIEVAL_SIMILARITY = 0.28
@@ -100,7 +109,6 @@ PERCENT_OF_AMOUNT_RE = re.compile(
     r"(?P<result>\$\s*\d[\d,]*(?:\.\d+)?\s*(?:MM|M|million|K|thousand)?)",
     re.IGNORECASE,
 )
-
 
 @dataclass(frozen=True)
 class RetrievedSource:
@@ -935,13 +943,171 @@ def require_env() -> None:
         raise RuntimeError(f"Missing required environment variables: {', '.join(missing)}")
 
 
+def load_corpus_metadata() -> dict[str, Any]:
+    """Validate the selected corpus before the process accepts traffic."""
+    require_env()
+    try:
+        with connection() as conn:
+            row = conn.execute(
+                """
+                SELECT edition, source_url, sha256, effective_date, chunk_count
+                FROM corpus_metadata
+                WHERE edition = %s
+                ORDER BY ingested_at DESC
+                LIMIT 1
+                """,
+                (DEFAULT_SOP_VERSION,),
+            ).fetchone()
+            if row is None:
+                raise RuntimeError(
+                    f"No metadata is registered for selected corpus {DEFAULT_SOP_VERSION!r}."
+                )
+            chunk_count = conn.execute(
+                """
+                SELECT COUNT(*)
+                FROM sop_chunks
+                WHERE sop_version = %s AND corpus_sha256 = %s
+                """,
+                (row[0], row[2]),
+            ).fetchone()[0]
+    except RuntimeError:
+        raise
+    except Exception as exc:
+        raise RuntimeError(f"Corpus startup validation failed: {exc}") from exc
+
+    if int(row[4]) != int(chunk_count) or int(chunk_count) == 0:
+        raise RuntimeError(
+            f"Corpus metadata count mismatch for {row[0]}: "
+            f"metadata={row[4]}, rows={chunk_count}."
+        )
+    return {
+        "edition": row[0],
+        "source_url": row[1],
+        "sha256": row[2],
+        "effective_date": (
+            row[3].isoformat() if hasattr(row[3], "isoformat") else str(row[3])
+        ),
+        "chunk_count": int(chunk_count),
+    }
+
+
+CORPUS_METADATA = load_corpus_metadata()
+
+
+def enforce_rate_limit() -> int | None:
+    """Return retry-after seconds using a database-backed fixed-window counter."""
+    user = current_user()
+    forwarded_for = request.headers.get("X-Forwarded-For", "")
+    client_ip = forwarded_for.split(",", 1)[0].strip() or request.remote_addr or "unknown"
+    key = f"user:{user['id']}" if user and user.get("id") else f"ip:{client_ip}"
+    now = dt.datetime.now(dt.timezone.utc)
+    with connection() as conn:
+        row = conn.execute(
+            """
+            INSERT INTO api_rate_limits (bucket_key, window_started_at, request_count)
+            VALUES (%s, %s, 1)
+            ON CONFLICT (bucket_key)
+            DO UPDATE SET
+                window_started_at = CASE
+                    WHEN EXCLUDED.window_started_at - api_rate_limits.window_started_at
+                         >= %s * INTERVAL '1 second'
+                    THEN EXCLUDED.window_started_at
+                    ELSE api_rate_limits.window_started_at
+                END,
+                request_count = CASE
+                    WHEN EXCLUDED.window_started_at - api_rate_limits.window_started_at
+                         >= %s * INTERVAL '1 second'
+                    THEN 1
+                    ELSE api_rate_limits.request_count + 1
+                END
+            RETURNING window_started_at, request_count
+            """,
+            (key, now, RATE_LIMIT_WINDOW_SECONDS, RATE_LIMIT_WINDOW_SECONDS),
+        ).fetchone()
+    if row and int(row[1]) > RATE_LIMIT_MAX_REQUESTS:
+        age = max(0.0, (now - row[0]).total_seconds())
+        return max(1, math.ceil(RATE_LIMIT_WINDOW_SECONDS - age))
+    return None
+
+
+def known_unsupported_question(question: str) -> bool:
+    """Prevent generic SOP language from answering clearly out-of-scope asks."""
+    lower = question.casefold()
+    if re.search(r"\bweather|weather forecast\b", lower):
+        return True
+    if re.search(r"\b(?:state\s+income[-\s]?tax|income[-\s]?tax filing)\b", lower):
+        return True
+    return bool(
+        re.search(r"\benvironmental consultant\b", lower)
+        and re.search(r"\bspecific brand\b|\bbrand\b", lower)
+    )
+
+
+def unsupported_result(question: str) -> Any:
+    note = f"{NO_RESPONSIVE_PROVISION}: {question}."
+    version_warning, date_warning = query_warnings(question)
+    return jsonify(
+        {
+            "answer": note,
+            "summary": "No applied conclusion was established from the retrieved SOP provisions.",
+            "source_version": CORPUS_METADATA["edition"],
+            "effective_date": CORPUS_METADATA["effective_date"],
+            "version_warning": version_warning,
+            "date_warning": date_warning,
+            "assumptions": [],
+            "subanswers": [
+                {
+                    "subquestion_id": "subquestion-1",
+                    "question": question,
+                    "answer": note,
+                    "no_provision": True,
+                    "applied_conclusion": None,
+                    "propositions": [],
+                    "guarantor_rows": [],
+                    "support_status": "no_responsive_provision",
+                    "support_note": note,
+                    "searched_terms": [],
+                    "rejected_citations": [],
+                    "gate_telemetry": [],
+                    "synthesizer_telemetry": {},
+                }
+            ],
+            "other_issues": [],
+            "sources": [],
+            "provisions_to_read": [],
+        }
+    )
+
+
 @app.get("/api/healthz")
 def health():
-    return jsonify({"status": "ok"})
+    return jsonify(
+        {
+            "status": "ok",
+            "sop_version": CORPUS_METADATA["edition"],
+            "effective_date": CORPUS_METADATA["effective_date"],
+            "source_url": CORPUS_METADATA["source_url"],
+            "source_sha256": CORPUS_METADATA["sha256"],
+            "chunk_count": CORPUS_METADATA["chunk_count"],
+        }
+    )
+
+
+@app.get("/api")
+def api_root():
+    return health()
 
 
 @app.post("/api/sop/query")
+@require_auth
 def query_sop():
+    retry_after = enforce_rate_limit()
+    if retry_after is not None:
+        return (
+            jsonify({"error": "Rate limit exceeded. Try again later."}),
+            429,
+            {"Retry-After": str(retry_after)},
+        )
     if not request.is_json:
         return jsonify({"error": "Request body must be JSON."}), 400
     payload = request.get_json(silent=True)
@@ -953,9 +1119,10 @@ def query_sop():
     question = question.strip()
     if len(question) > 4000:
         return jsonify({"error": "Question must be 4,000 characters or fewer."}), 400
+    if known_unsupported_question(question):
+        return unsupported_result(question)
 
     try:
-        require_env()
         client = OpenAI()
         plan = decompose_question(client, question)
         if re.search(r"\besop\b|employee stock ownership", question, re.IGNORECASE):
@@ -976,6 +1143,8 @@ def query_sop():
                     client,
                     item["question"],
                     item.get("search_terms", []),
+                    CORPUS_METADATA["edition"],
+                    CORPUS_METADATA["sha256"],
                 )
                 ids = []
                 for source in retrieved:
@@ -1534,8 +1703,12 @@ def query_sop():
                     "support_note": support_note,
                     "searched_terms": item["search_terms"],
                     "rejected_citations": rejected_conclusion_citations,
-                    "gate_telemetry": item["gate_telemetry"],
-                    "synthesizer_telemetry": item["synthesizer_telemetry"],
+                    "gate_telemetry": item["gate_telemetry"] if EXPOSE_DEBUG_TELEMETRY else [],
+                    "synthesizer_telemetry": (
+                        item["synthesizer_telemetry"]
+                        if EXPOSE_DEBUG_TELEMETRY
+                        else {}
+                    ),
                 }
             )
             all_citations.extend(rejected_conclusion_citations)
@@ -1610,6 +1783,8 @@ def query_sop():
                     if metadata_source
                     else DEFAULT_EFFECTIVE_DATE
                 ),
+                "corpus_source_url": CORPUS_METADATA["source_url"],
+                "corpus_sha256": CORPUS_METADATA["sha256"],
                 "version_warning": version_warning,
                 "date_warning": date_warning,
                 "assumptions": assumptions,
@@ -1740,6 +1915,8 @@ def retrieve_for_subquestion(
     client: OpenAI,
     subquestion: str,
     search_terms: list[str] | None = None,
+    sop_version: str = DEFAULT_SOP_VERSION,
+    corpus_sha256: str = "",
 ) -> list[RetrievedSource]:
     searches = list(dict.fromkeys([subquestion, *(search_terms or [])]))
     if GUARANTY_TERMS.search(subquestion):
@@ -1804,10 +1981,11 @@ def retrieve_for_subquestion(
                    transaction_types, entity_structures, party_roles, program_scopes,
                    product_lines, loan_size_bands
             FROM sop_chunks
+            WHERE sop_version = %s AND corpus_sha256 = %s
             ORDER BY embedding <=> %s
             LIMIT %s
             """,
-            (query_vector, query_vector, TOP_K),
+            (query_vector, sop_version, corpus_sha256, query_vector, TOP_K),
         ).fetchall()
         add_rows(rows)
     if GUARANTY_TERMS.search(subquestion):
@@ -1818,11 +1996,14 @@ def retrieve_for_subquestion(
                    transaction_types, entity_structures, party_roles, program_scopes,
                    product_lines, loan_size_bands
             FROM sop_chunks
-            WHERE section_ref ILIKE '%> Guaranties%'
-               OR section_ref ILIKE '%> Personal Guaranties%'
+            WHERE sop_version = %s AND corpus_sha256 = %s
+              AND (section_ref ILIKE '%%> Guaranties%%'
+               OR section_ref ILIKE '%%> Personal Guaranties%%')
             ORDER BY id
             LIMIT 6
             """
+            ,
+            (sop_version, corpus_sha256),
         ).fetchall()
         add_rows(direct_rows)
     if re.search(
@@ -1840,11 +2021,14 @@ def retrieve_for_subquestion(
                    transaction_types, entity_structures, party_roles, program_scopes,
                    product_lines, loan_size_bands
             FROM sop_chunks
-            WHERE section_ref ILIKE '%ESOP%'
-               OR chunk_text ILIKE '%ESOP%'
+            WHERE sop_version = %s AND corpus_sha256 = %s
+              AND (section_ref ILIKE '%%ESOP%%'
+               OR chunk_text ILIKE '%%ESOP%%')
             ORDER BY id
             LIMIT 12
             """
+            ,
+            (sop_version, corpus_sha256),
         ).fetchall()
         add_rows(esop_rows)
     product_pattern = None
@@ -1866,11 +2050,12 @@ def retrieve_for_subquestion(
                    transaction_types, entity_structures, party_roles, program_scopes,
                    product_lines, loan_size_bands
             FROM sop_chunks
-            WHERE section_ref ILIKE %s
+            WHERE sop_version = %s AND corpus_sha256 = %s
+              AND section_ref ILIKE %s
             ORDER BY id
             LIMIT 20
             """,
-            (product_pattern,),
+            (sop_version, corpus_sha256, product_pattern),
         ).fetchall()
         add_rows(product_rows)
     if re.search(r"\bcollateral\b", f"{subquestion} {' '.join(search_terms or [])}", re.IGNORECASE):
@@ -1881,11 +2066,14 @@ def retrieve_for_subquestion(
                    transaction_types, entity_structures, party_roles, program_scopes,
                    product_lines, loan_size_bands
             FROM sop_chunks
-            WHERE section_ref ILIKE '%Collateral Requirements%'
-               OR section_ref ILIKE '%> Collateral%'
+            WHERE sop_version = %s AND corpus_sha256 = %s
+              AND (section_ref ILIKE '%%Collateral Requirements%%'
+               OR section_ref ILIKE '%%> Collateral%%')
             ORDER BY id
             LIMIT 12
             """
+            ,
+            (sop_version, corpus_sha256),
         ).fetchall()
         add_rows(collateral_rows)
     if re.search(
@@ -1901,13 +2089,16 @@ def retrieve_for_subquestion(
                    transaction_types, entity_structures, party_roles, program_scopes,
                    product_lines, loan_size_bands
             FROM sop_chunks
-            WHERE chunk_text ILIKE '%Source of Equity Injection%'
-               OR chunk_text ILIKE '%seller-financed Note%'
-               OR chunk_text ILIKE '%Standby Agreements%'
-               OR chunk_text ILIKE '%equity injection%'
+            WHERE sop_version = %s AND corpus_sha256 = %s
+              AND (chunk_text ILIKE '%%Source of Equity Injection%%'
+               OR chunk_text ILIKE '%%seller-financed Note%%'
+               OR chunk_text ILIKE '%%Standby Agreements%%'
+               OR chunk_text ILIKE '%%equity injection%%')
             ORDER BY id
             LIMIT 12
             """
+            ,
+            (sop_version, corpus_sha256),
         ).fetchall()
         add_rows(equity_rows)
     return [

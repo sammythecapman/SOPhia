@@ -21,6 +21,9 @@ args = ["uv", "run", "gunicorn", "--chdir", "artifacts/api-server", "--bind", "0
 [services.production.run.env]
 PORT = "8080"
 NODE_ENV = "production"
+EXPOSE_DEBUG_TELEMETRY = "false"
+SOP_RATE_LIMIT_MAX_REQUESTS = "30"
+SOP_RATE_LIMIT_WINDOW_SECONDS = "60"
 
 [services.production.health.startup]
 path = "/api/healthz"

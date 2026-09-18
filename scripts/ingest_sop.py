@@ -23,6 +23,7 @@ MAX_CHARS = 6000
 BATCH_SIZE = 64
 STRUCTURAL_HEADING_RE = re.compile(r"^heading [1-6]$")
 DEFAULT_EFFECTIVE_DATE = "2026-10-01"
+DEFAULT_SOURCE_URL = "https://www.sba.gov/document/sop-50-10-8-1"
 
 
 def find_docx(explicit: str | None) -> Path:
@@ -174,7 +175,13 @@ def embed_with_retry(client: OpenAI, texts: list[str]) -> list[list[float]]:
     raise RuntimeError("Embedding retry loop exhausted")
 
 
-def ingest(chunks: list[dict[str, str]], version: str, effective_date: str | None) -> None:
+def ingest(
+    chunks: list[dict[str, str]],
+    version: str,
+    effective_date: str | None,
+    source_url: str,
+    sha256: str,
+) -> None:
     if not os.getenv("OPENAI_API_KEY") or not os.getenv("DATABASE_URL"):
         raise RuntimeError("OPENAI_API_KEY and DATABASE_URL are required for ingestion.")
     client = OpenAI()
@@ -189,12 +196,22 @@ def ingest(chunks: list[dict[str, str]], version: str, effective_date: str | Non
                         """
                         INSERT INTO sop_chunks
                             (sop_version, section_ref, chunk_text, effective_date, page_number,
-                            transaction_types, entity_structures, party_roles, program_scopes,
-                            product_lines, loan_size_bands,
+                            corpus_sha256, transaction_types, entity_structures, party_roles,
+                            program_scopes, product_lines, loan_size_bands,
                              embedding)
-                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                         ON CONFLICT (sop_version, section_ref, chunk_hash)
-                        DO UPDATE SET embedding = EXCLUDED.embedding
+                        DO UPDATE SET
+                            embedding = EXCLUDED.embedding,
+                            effective_date = EXCLUDED.effective_date,
+                            page_number = EXCLUDED.page_number,
+                            corpus_sha256 = EXCLUDED.corpus_sha256,
+                            transaction_types = EXCLUDED.transaction_types,
+                            entity_structures = EXCLUDED.entity_structures,
+                            party_roles = EXCLUDED.party_roles,
+                            program_scopes = EXCLUDED.program_scopes,
+                            product_lines = EXCLUDED.product_lines,
+                            loan_size_bands = EXCLUDED.loan_size_bands
                         """,
                         (
                             version,
@@ -202,6 +219,7 @@ def ingest(chunks: list[dict[str, str]], version: str, effective_date: str | Non
                             item["chunk_text"],
                             effective_date,
                             item["page_number"],
+                            sha256,
                             item["transaction_types"],
                             item["entity_structures"],
                             item["party_roles"],
@@ -213,6 +231,21 @@ def ingest(chunks: list[dict[str, str]], version: str, effective_date: str | Non
                     )
                     inserted += 1
             print(f"Processed {min(start + BATCH_SIZE, len(chunks))}/{len(chunks)} chunks")
+        conn.execute(
+            """
+            INSERT INTO corpus_metadata
+                (edition, source_url, sha256, effective_date, chunk_count)
+            VALUES (%s, %s, %s, %s, %s)
+            ON CONFLICT (edition)
+            DO UPDATE SET
+                source_url = EXCLUDED.source_url,
+                sha256 = EXCLUDED.sha256,
+                effective_date = EXCLUDED.effective_date,
+                chunk_count = EXCLUDED.chunk_count,
+                ingested_at = NOW()
+            """,
+            (version, source_url, sha256, effective_date, len(chunks)),
+        )
     print(f"Ingestion complete: {inserted} chunks inserted or refreshed.")
 
 
@@ -221,13 +254,14 @@ def main() -> None:
     parser.add_argument("path", nargs="?")
     parser.add_argument("--version", default="SOP 50 10 8.1")
     parser.add_argument("--effective-date", default=DEFAULT_EFFECTIVE_DATE)
+    parser.add_argument("--source-url", default=os.getenv("SOP_SOURCE_URL", DEFAULT_SOURCE_URL))
     parser.add_argument("--preview-count", type=int, default=8)
     parser.add_argument("--ingest", action="store_true", help="Enable approval prompt and ingestion")
     args = parser.parse_args()
     path = find_docx(args.path)
     chunks = extract_chunks(path)
-    fingerprint = hashlib.sha256(path.read_bytes()).hexdigest()[:12]
-    print(f"Document: {path} ({len(chunks)} chunks, fingerprint {fingerprint})")
+    sha256 = hashlib.sha256(path.read_bytes()).hexdigest()
+    print(f"Document: {path} ({len(chunks)} chunks, SHA-256 {sha256})")
     for index, chunk in enumerate(chunks[: args.preview_count], 1):
         preview = chunk["chunk_text"][:350].replace("\n", " ")
         print(f"\n[{index}] {chunk['section_ref']}\n{preview}")
@@ -241,7 +275,7 @@ def main() -> None:
     if confirmation != f"INGEST {args.version}":
         print("Approval not received. No embeddings requested and no rows written.")
         return
-    ingest(chunks, args.version, args.effective_date)
+    ingest(chunks, args.version, args.effective_date, args.source_url, sha256)
 
 
 if __name__ == "__main__":

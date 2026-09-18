@@ -2,17 +2,24 @@
 """Run the SOP regression set against the local API and score grounding safety."""
 
 import argparse
+import datetime as dt
 import json
+import os
 import sys
+import time
 from pathlib import Path
+from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
 
-def query(base_url: str, question: str) -> dict:
+def query(base_url: str, question: str, cookie: str | None = None) -> dict:
+    headers = {"Content-Type": "application/json"}
+    if cookie:
+        headers["Cookie"] = cookie
     request = Request(
         f"{base_url.rstrip('/')}/api/sop/query",
         data=json.dumps({"question": question}).encode(),
-        headers={"Content-Type": "application/json"},
+        headers=headers,
         method="POST",
     )
     with urlopen(request, timeout=180) as response:
@@ -134,6 +141,22 @@ def main() -> int:
         default=Path("tests/sop_regression.json"),
     )
     parser.add_argument("--base-url", default="http://127.0.0.1:8080")
+    parser.add_argument(
+        "--cookie",
+        default=os.getenv("SOP_REGRESSION_COOKIE"),
+        help="Authenticated Cookie header value; defaults to SOP_REGRESSION_COOKIE.",
+    )
+    parser.add_argument(
+        "--report",
+        type=Path,
+        help="Write a JSON case-by-case report to this path.",
+    )
+    parser.add_argument(
+        "--delay-seconds",
+        type=float,
+        default=0,
+        help="Pause between cases to stay below a deployment's rate limit.",
+    )
     args = parser.parse_args()
     cases = json.loads(args.cases.read_text())
 
@@ -148,9 +171,15 @@ def main() -> int:
     applicability_failures = 0
     guarantor_row_failures = 0
     baseline_failures = 0
+    case_results: list[dict[str, object]] = []
 
     for case in cases:
-        result = query(args.base_url, case["question"])
+        try:
+            result = query(args.base_url, case["question"], args.cookie)
+        except HTTPError as exc:
+            body = exc.read().decode("utf-8", errors="replace")
+            print(f"ERROR {case['id']}: HTTP {exc.code}: {body}", file=sys.stderr)
+            return 2
         sources = result.get("sources", [])
         supported_propositions = []
         for subanswer in result.get("subanswers", []):
@@ -292,43 +321,57 @@ def main() -> int:
                 else ""
             )
         )
-
-    print(
-        json.dumps(
+        case_results.append(
             {
-                "cases": len(cases),
-                "phantom_citation_rate": phantom_citations / len(cases),
-                "citation_failures": citation_failures,
-                "support_signal_failures": support_signal_failures,
-                "section_failures": section_failures,
-                "unsupported_failures": unsupported_failures,
-                "arithmetic_failures": arithmetic_failures,
-                "negative_audit_failures": negative_audit_failures,
-                "date_warning_failures": date_warning_failures,
-                "applicability_failures": applicability_failures,
-                "guarantor_row_failures": guarantor_row_failures,
-                "baseline_failures": baseline_failures,
-            },
-            indent=2,
+                "id": case["id"],
+                "status": status,
+                "source_count": len(sources),
+                "phantom": phantom,
+                "citation_failure": citation_failure,
+                "support_signal_failure": signal_failure,
+                "section_failure": section_failure,
+                "unsupported_failure": unsupported_failure,
+                "arithmetic_failure": arithmetic_failure,
+                "negative_audit_failure": negative_audit_failure
+                or forbidden_section_failure,
+                "date_warning_failure": date_warning_failure,
+                "applicability_failure": applicability_failure,
+                "guarantor_row_failure": row_failure or unresolved_failure,
+                "baseline_failure": baseline_failure,
+            }
         )
-    )
-    return int(
-        any(
-            (
-                phantom_citations,
-                citation_failures,
-                support_signal_failures,
-                section_failures,
-                unsupported_failures,
-                arithmetic_failures,
-                negative_audit_failures,
-                date_warning_failures,
-                applicability_failures,
-                guarantor_row_failures,
-                baseline_failures,
-            )
-        )
-    )
+        if args.delay_seconds > 0 and case is not cases[-1]:
+            time.sleep(args.delay_seconds)
+
+    summary = {
+        "cases": len(cases),
+        "passed": sum(item["status"] == "PASS" for item in case_results),
+        "failed": sum(item["status"] == "FAIL" for item in case_results),
+        "phantom_citation_rate": phantom_citations / len(cases),
+        "citation_failures": citation_failures,
+        "support_signal_failures": support_signal_failures,
+        "section_failures": section_failures,
+        "unsupported_failures": unsupported_failures,
+        "arithmetic_failures": arithmetic_failures,
+        "negative_audit_failures": negative_audit_failures,
+        "date_warning_failures": date_warning_failures,
+        "applicability_failures": applicability_failures,
+        "guarantor_row_failures": guarantor_row_failures,
+        "baseline_failures": baseline_failures,
+    }
+    report = {
+        "target": args.base_url,
+        "suite": str(args.cases),
+        "recorded_at_utc": dt.datetime.now(dt.timezone.utc).isoformat(),
+        "summary": summary,
+        "cases": case_results,
+    }
+    print(json.dumps(summary, indent=2))
+    if args.report:
+        args.report.parent.mkdir(parents=True, exist_ok=True)
+        args.report.write_text(json.dumps(report, indent=2) + "\n")
+        print(f"Report written to {args.report}")
+    return int(summary["failed"] > 0)
 
 
 if __name__ == "__main__":
