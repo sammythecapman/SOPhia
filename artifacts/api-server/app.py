@@ -182,10 +182,13 @@ def internal_conditions_check(
         )
 
     if re.search(r"new\s+(?:business|borrower)|\bstart[-\s]?up\b", lower):
-        if not re.search(
-            r"new\s+(?:business|borrower)|\bstart[-\s]?up\b", facts_lower
+        if re.search(
+            r"\bexisting(?:\s+\w+){0,2}\s+business\b|"
+            r"\bexisting\s+borrower\b|already\s+(?:operating|established)|"
+            r"\bnot\s+(?:a\s+)?start[-\s]?up\b",
+            facts_lower,
         ):
-            return False, "requires a startup or new-business fact not stated here"
+            return False, "requires a startup or new-business fact; the facts identify an existing business"
 
     if re.search(r"new\s+c\s*corp(?:oration)?|c\s*corporation", lower):
         if re.search(r"\bllc\b|limited liability company|s\s*corp", facts_lower) and not re.search(
@@ -901,14 +904,37 @@ def query_sop():
                 standard_product_assumed = True
             applicable_sources: list[RetrievedSource] = []
             inapplicable_sources: list[tuple[RetrievedSource, str]] = []
+            gate_telemetry: list[dict[str, Any]] = []
             fact_text = "\n".join(
                 [question, item["question"], *item.get("material_facts", [])]
             )
             for source in context_sources:
+                tags = source_tags(source)
+                excluded_dimension = None
+                for dimension in APPLICABILITY_DIMENSIONS:
+                    source_values = set(tags.get(dimension, []))
+                    fact_values = set(fact_tags.get(dimension, []))
+                    if source_values and fact_values and not source_values.intersection(
+                        fact_values
+                    ):
+                        excluded_dimension = dimension
+                        break
                 applicable, reason = source_applicability(source, fact_tags)
+                telemetry = {
+                    "chunk_id": source.db_id,
+                    "source_id": source.source_id,
+                    "tags": tags,
+                    "fact_pattern": fact_tags,
+                    "excluded_dimension": excluded_dimension,
+                    "conditions": "not_checked",
+                    "result": "excluded" if not applicable else "admitted",
+                }
                 if applicable:
                     conditions_ok, condition_reason = internal_conditions_check(
                         source, fact_text, fact_tags
+                    )
+                    telemetry["conditions"] = (
+                        "passed" if conditions_ok else "failed"
                     )
                     if conditions_ok:
                         applicable_sources.append(source)
@@ -925,6 +951,11 @@ def query_sop():
                     inapplicable_sources.append(
                         (source, reason or "The source trigger does not match the facts.")
                     )
+                gate_telemetry.append(telemetry)
+                app.logger.info(
+                    "SOP applicability gate: %s",
+                    json.dumps(telemetry, sort_keys=True),
+                )
             generated = generate_propositions(
                 client,
                 question,
@@ -963,6 +994,7 @@ def query_sop():
                     "sources_available": bool(applicable_sources),
                     "inapplicable_sources": inapplicable_sources,
                     "fact_tags": fact_tags,
+                    "gate_telemetry": gate_telemetry,
                 }
             )
             numeric_reference = "\n".join(
@@ -1183,8 +1215,12 @@ def query_sop():
                 if item["inapplicable_sources"] and not item["sources_available"]:
                     support_status = "not_applicable"
                     reason = item["inapplicable_sources"][0][1]
-                    support_note = f"Provision not applicable to this transaction type: {reason}."
-                    answer = NOT_APPLICABLE
+                    support_note = (
+                        "All retrieved provisions were excluded by applicability "
+                        f"checks. Highest-ranked candidate: {reason}. Review the "
+                        "rejected evidence below; retrieval did return source text."
+                    )
+                    answer = support_note
                 else:
                     support_status = "not_established"
                     support_note = NOT_ESTABLISHED
@@ -1216,6 +1252,7 @@ def query_sop():
                     "support_note": support_note,
                     "searched_terms": item["search_terms"],
                     "rejected_citations": rejected_conclusion_citations,
+                    "gate_telemetry": item["gate_telemetry"],
                 }
             )
             all_citations.extend(rejected_conclusion_citations)
@@ -1239,12 +1276,12 @@ def query_sop():
             if subanswer.get("applied_conclusion")
         ][:3]
         summary = " ".join(summary_sentences)
+        assumptions: list[str] = []
         if standard_product_assumed:
-            product_note = (
+            assumptions.append(
                 "No loan product was specified; this analysis treats the transaction "
                 "as a Standard 7(a) loan."
             )
-            summary = f"{product_note} {summary}".strip()
         if not summary:
             summary = "No applied conclusion was established from the retrieved SOP provisions."
         answer_parts = [summary]
@@ -1292,6 +1329,7 @@ def query_sop():
                 ),
                 "version_warning": version_warning,
                 "date_warning": date_warning,
+                "assumptions": assumptions,
                 "subanswers": rendered_subanswers,
                 "other_issues": rendered_issues,
                 "sources": unique_citations,

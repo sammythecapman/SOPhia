@@ -8,6 +8,7 @@
 import type { SopGuarantorRow } from './sopGuarantorRow';
 import type { SopProposition } from './sopProposition';
 import type { SopSource } from './sopSource';
+import type { SopSubanswerGateTelemetryItem } from './sopSubanswerGateTelemetryItem';
 import type { SopSubanswerSupportStatus } from './sopSubanswerSupportStatus';
 
 export interface SopSubanswer {
@@ -22,4 +23,5 @@ export interface SopSubanswer {
   rejected_citations: SopSource[];
   propositions: SopProposition[];
   guarantor_rows: SopGuarantorRow[];
+  gate_telemetry: SopSubanswerGateTelemetryItem[];
 }

@@ -18,6 +18,7 @@ export interface SopQueryResult {
   version_warning: string | null;
   /** @nullable */
   date_warning: string | null;
+  assumptions: string[];
   subanswers: SopSubanswer[];
   other_issues: SopProposition[];
   sources?: SopSource[];

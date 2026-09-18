@@ -195,6 +195,11 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/SopGuarantorRow"
+        gate_telemetry:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
       required:
         - question
         - answer
@@ -206,6 +211,7 @@ components:
         - rejected_citations
         - propositions
         - guarantor_rows
+        - gate_telemetry
     SopQueryResult:
       type: object
       properties:
@@ -221,6 +227,10 @@ components:
           type: [string, "null"]
         date_warning:
           type: [string, "null"]
+        assumptions:
+          type: array
+          items:
+            type: string
         subanswers:
           type: array
           items:
@@ -244,6 +254,7 @@ components:
         - effective_date
         - version_warning
         - date_warning
+        - assumptions
         - subanswers
         - other_issues
         - sources

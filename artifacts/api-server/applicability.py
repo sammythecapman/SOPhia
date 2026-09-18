@@ -327,7 +327,10 @@ def applicability_check(
     for dimension in APPLICABILITY_DIMENSIONS:
         source_values = set(source_tags.get(dimension, []))
         fact_values = set(fact_tags.get(dimension, []))
-        if not source_values:
+        # Missing metadata on either side is not an affirmative mismatch.
+        # A provision remains admissible until both the provision and the
+        # fact pattern state conflicting values for this dimension.
+        if not source_values or not fact_values:
             continue
         if source_values.intersection(fact_values):
             continue
@@ -339,7 +342,10 @@ def applicability_check(
                 False,
                 f"provision governs {source_label}; the facts indicate {fact_label}",
             )
-        return False, f"provision requires {source_label}, which is not stated in the facts"
+        return (
+            False,
+            f"provision governs {source_label}; the facts indicate {fact_label}",
+        )
     return True, None
 
 

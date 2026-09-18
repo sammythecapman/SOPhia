@@ -81,6 +81,8 @@ export const SopSubanswerSupportStatus = {
   retrieval_empty: 'retrieval_empty',
 } as const;
 
+export type SopSubanswerGateTelemetryItem = { [key: string]: unknown };
+
 export interface SopSubanswer {
   question: string;
   answer: string;
@@ -93,6 +95,7 @@ export interface SopSubanswer {
   rejected_citations: SopSource[];
   propositions: SopProposition[];
   guarantor_rows: SopGuarantorRow[];
+  gate_telemetry: SopSubanswerGateTelemetryItem[];
 }
 
 export interface SopQueryResult {
@@ -104,6 +107,7 @@ export interface SopQueryResult {
   version_warning: string | null;
   /** @nullable */
   date_warning: string | null;
+  assumptions: string[];
   subanswers: SopSubanswer[];
   other_issues: SopProposition[];
   sources?: SopSource[];

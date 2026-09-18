@@ -542,6 +542,13 @@ export default function Home() {
                 </Alert>
               )}
 
+              {(result.assumptions ?? []).length > 0 && (
+                <p className="text-xs leading-relaxed text-muted-foreground">
+                  <span className="font-semibold text-foreground/70">Assumption:</span>{" "}
+                  {result.assumptions.join(" ")}
+                </p>
+              )}
+
               <Card className="border-primary/15 bg-primary/[0.04] shadow-sm">
                 <CardHeader className="pb-3">
                   <CardTitle className="text-xs font-semibold uppercase tracking-widest text-primary">

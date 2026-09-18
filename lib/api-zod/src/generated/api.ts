@@ -35,6 +35,7 @@ export const QuerySopResponse = zod.object({
   "effective_date": zod.string(),
   "version_warning": zod.string().nullable(),
   "date_warning": zod.string().nullable(),
+  "assumptions": zod.array(zod.string()),
   "subanswers": zod.array(zod.object({
   "question": zod.string(),
   "answer": zod.string(),
@@ -115,7 +116,8 @@ export const QuerySopResponse = zod.object({
   "applicability_reason": zod.string().nullable(),
   "verified": zod.boolean()
 }))
-}))
+})),
+  "gate_telemetry": zod.array(zod.record(zod.string(), zod.unknown()))
 })),
   "other_issues": zod.array(zod.object({
   "text": zod.string(),
