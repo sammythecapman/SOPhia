@@ -60,10 +60,31 @@ def has_explicit_guaranty_obligation(text: str) -> bool:
     sentences = re.split(r"(?<=[.!?])\s+", text)
     return any(EXPLICIT_GUARANTY_OBLIGATION_RE.search(sentence) for sentence in sentences)
 GUARANTY_TERMS = re.compile(
-    r"\b(guarant(?:y|ee|ies|or)|ownership|owner|trust|plan ownership|"
-    r"co-borrower|co borrower|unconditional)\b",
+    r"\b(guarant(?:y|ies|ee|ees|or|ors)|co[-\s]?borrowers?|unconditional)\b",
     re.IGNORECASE,
 )
+GUARANTY_ACTOR_TERMS = re.compile(
+    r"\b(?:owners?|ownership|trusts?|plan sponsors?|plan trustees?|co[-\s]?borrowers?)\b",
+    re.IGNORECASE,
+)
+GUARANTY_ACTION_TERMS = re.compile(
+    r"\b(?:sign|execute|co[-\s]?sign|guarantee)\b",
+    re.IGNORECASE,
+)
+
+
+def has_guaranty_intent(text: str) -> bool:
+    """Recognize guaranty questions without treating any ownership mention as one."""
+    if GUARANTY_TERMS.search(text):
+        return True
+    actor = GUARANTY_ACTOR_TERMS.pattern
+    action = GUARANTY_ACTION_TERMS.pattern
+    return bool(
+        re.search(rf"(?:{actor})[^.!?]{0,100}(?:{action})", text, re.IGNORECASE)
+        or re.search(rf"(?:{action})[^.!?]{0,100}(?:{actor})", text, re.IGNORECASE)
+    )
+
+
 GUARANTY_RETRIEVAL_QUERY = (
     "SBA guaranty requirements: 20 percent direct or indirect ownership, "
     "full unconditional guaranty, trusts, borrowers, co-borrowers, and "
@@ -364,6 +385,82 @@ def fallback_plan(question: str) -> list[dict[str, Any]]:
     ]
 
 
+def build_retrieval_searches(
+    subquestion: str,
+    search_terms: list[str] | None = None,
+    material_facts: list[str] | None = None,
+    original_question: str = "",
+) -> list[str]:
+    """Keep each material fact as an independent retrieval seed."""
+    values = [
+        subquestion,
+        *(search_terms or []),
+        *(material_facts or []),
+        original_question,
+    ]
+    searches = [
+        value.strip()
+        for value in values
+        if isinstance(value, str) and value.strip()
+    ]
+    searches.extend(
+        term
+        for value in tuple(searches)
+        for term in build_search_terms(value)
+    )
+    return list(dict.fromkeys(searches))
+
+
+LEXICAL_RETRIEVAL_STOPWORDS = {
+    "about", "after", "also", "among", "and", "any", "applicant",
+    "applicants", "are", "because", "been", "before", "being", "borrower",
+    "borrowers", "business", "businesses", "company", "companies", "could",
+    "does", "doing", "each", "eligible", "eligibility", "entity", "entities",
+    "from", "have", "into", "is", "lender", "lenders", "loan", "loans", "may",
+    "must", "not", "only", "other", "over", "require", "required",
+    "requirement", "requirements", "rule", "rules", "sba", "should", "that",
+    "their", "there", "these", "this", "those", "under", "what", "when",
+    "where", "which", "while", "with", "would",
+}
+
+
+def build_lexical_search_query(text: str) -> str:
+    """Create a broad OR query so one salient fact can retrieve a policy passage."""
+    terms = []
+    for token in re.findall(r"[a-z0-9]+", text.casefold()):
+        if len(token) < 3 and not (token.isdigit() and len(token) >= 2):
+            continue
+        if token in LEXICAL_RETRIEVAL_STOPWORDS or token in terms:
+            continue
+        terms.append(token)
+        if len(terms) == 20:
+            break
+    return " OR ".join(terms)
+
+
+def lexical_retrieval_seeds(
+    subquestion: str,
+    search_terms: list[str] | None,
+    material_facts: list[str] | None,
+    original_question: str,
+) -> list[str]:
+    seeds = [
+        subquestion,
+        *(search_terms or []),
+        *(material_facts or []),
+        original_question,
+    ]
+    return list(
+        dict.fromkeys(
+            query
+            for seed in seeds
+            if isinstance(seed, str) and seed.strip()
+            for query in [build_lexical_search_query(seed)]
+            if query
+        )
+    )
+
+
 def build_search_terms(text: str) -> list[str]:
     terms: list[str] = []
     lower = text.casefold()
@@ -379,7 +476,7 @@ def build_search_terms(text: str) -> list[str]:
         terms.append(ROBS_RETRIEVAL_QUERY)
     if re.search(r"\besop\b|employee stock ownership", lower):
         terms.append(ESOP_RETRIEVAL_QUERY)
-    if GUARANTY_TERMS.search(text):
+    if has_guaranty_intent(text):
         terms.append(GUARANTY_RETRIEVAL_QUERY)
     if re.search(r"environmental consultant|phase\s+i|phase 1", lower):
         terms.append("SBA environmental policy Phase I environmental consultant requirements")
@@ -597,7 +694,7 @@ def deterministic_guarantor_rows(
 
     combined = f"{original_question}\n{subquestion}"
     lower = combined.casefold()
-    if not GUARANTY_TERMS.search(combined):
+    if not has_guaranty_intent(combined):
         return []
 
     general_guaranty_sources = [
@@ -1008,16 +1105,49 @@ def augment_extracted_party_capacities(
     """Preserve explicit direct-ownership facts the extractor may label too broadly."""
 
     direct_ownership: list[tuple[str, float]] = []
-    for match in re.finditer(
+    explicit_ownership_claim = re.compile(
+        r"\b(?:holds?|owns?)\s+\d+(?:\.\d+)?\s*(?:%|percent)\b",
+        re.IGNORECASE,
+    )
+    clause_boundaries = list(
+        re.finditer(
+            r"\b(?:and|or|but|while|whereas)\b|[,;.!?\n]",
+            fact_text,
+            re.IGNORECASE,
+        )
+    )
+    claim_clauses: list[str] = []
+    clause_start = 0
+    for boundary in clause_boundaries:
+        left = fact_text[clause_start : boundary.start()]
+        right = fact_text[boundary.end() :]
+        if explicit_ownership_claim.search(left) and explicit_ownership_claim.search(
+            right
+        ):
+            claim_clauses.append(left)
+            clause_start = boundary.end()
+    claim_clauses.append(fact_text[clause_start:])
+
+    direct_owner_pattern = re.compile(
         r"(?P<party>[A-Za-z][A-Za-z0-9 '&()/.-]{1,60}?)\s+"
         r"(?:holds?|owns?)\s+(?P<percentage>\d+(?:\.\d+)?)\s*"
         r"(?:%|percent)"
-        r"(?P<tail>[^.;\n]{0,50})\bdirect(?:ly)?\b",
-        fact_text,
+        r"(?P<tail>\s{0,4}(?:as\s+(?:a\s+)?)?)\bdirect(?:ly)?\b",
         re.IGNORECASE,
-    ):
-        party = re.sub(r"^\s*(?:the|an|a)\s+", "", match.group("party")).strip()
-        direct_ownership.append((party, float(match.group("percentage"))))
+    )
+    for clause in claim_clauses:
+        for match in direct_owner_pattern.finditer(clause):
+            if re.search(r"\b(?:and|or)\b", match.group("party"), re.IGNORECASE):
+                continue
+            party = re.sub(
+                r"^\s*(?:(?:and|but)\s+)?(?:the|an|a)\s+",
+                "",
+                match.group("party"),
+                flags=re.IGNORECASE,
+            ).strip()
+            if not party:
+                continue
+            direct_ownership.append((party, float(match.group("percentage"))))
 
     augmented: list[dict[str, Any]] = []
     for party in parties:
@@ -1501,7 +1631,7 @@ def deterministic_applied_conclusion(
             }
 
     if (
-        GUARANTY_TERMS.search(combined)
+        has_guaranty_intent(combined)
         and re.search(r"\bspouse\b", lower)
         and re.search(r"\b(?:buyer|owner|key employee)\b", lower)
         and len(re.findall(r"\d+(?:\.\d+)?\s*(?:%|percent)", combined, re.IGNORECASE))
@@ -1796,6 +1926,8 @@ def query_sop():
                     item.get("search_terms", []),
                     CORPUS_METADATA["edition"],
                     CORPUS_METADATA["sha256"],
+                    material_facts=item.get("material_facts", []),
+                    original_question=question,
                 )
                 ids = []
                 for source in retrieved:
@@ -1843,8 +1975,7 @@ def query_sop():
                 for db_id in db_ids
                 if db_id in source_by_db_id
             ]
-            context_sources.sort(key=lambda source: source.similarity, reverse=True)
-            context_sources = context_sources[:MAX_CONTEXT_SOURCES]
+            context_sources = select_context_sources(context_sources)
             # Only user-supplied facts determine applicability. The planning
             # model may restate or overgeneralize a subquestion, so it must not
             # introduce a new transaction type or negate an explicit exclusion.
@@ -1955,7 +2086,7 @@ def query_sop():
             if deterministic_conclusion:
                 generated["applied_conclusion"] = deterministic_conclusion
             # Rows are built once from the pooled admitted provisions below.
-            if GUARANTY_TERMS.search(question):
+            if has_guaranty_intent(question):
                 generated["guarantor_rows"] = []
             if (
                 re.search(r"\benvironmental\b|\bphase\s+i\b", question, re.IGNORECASE)
@@ -2075,7 +2206,7 @@ def query_sop():
         # Planning may split one guarantor request into several subquestions,
         # each with a different retrieval slice. Build the final party/capacity
         # enumeration from the union so no capacity disappears between slices.
-        if GUARANTY_TERMS.search(question) and applicable_source_pool:
+        if has_guaranty_intent(question) and applicable_source_pool:
             pooled_sources = list(applicable_source_pool.values())
             pooled_rows = enumerate_guarantor_rows(client, question, pooled_sources)
             pooled_source_ids = {source.source_id for source in pooled_sources}
@@ -2136,6 +2267,14 @@ def query_sop():
 
         validated_candidates = validate_candidate_citations(candidates, source_by_id)
         audit_results = audit_propositions(client, question, validated_candidates, source_by_id)
+        for candidate_index, candidate in enumerate(validated_candidates):
+            trigger = audit_results.get(candidate_index, {}).get(
+                "unresolved_trigger"
+            )
+            if trigger:
+                subanswers[candidate["subanswer_index"]][
+                    "unresolved_trigger"
+                ] = trigger
         # An admitted sub-question may have useful audited propositions or
         # guarantor rows even when the model's conclusion object was empty or
         # failed audit. Preserve a substantive applied conclusion instead of
@@ -2184,13 +2323,19 @@ def query_sop():
                     "applicable_source_ids": list(item["admitted_source_ids"]),
                     "arithmetic_valid": True,
                 }
-                validated_candidates.append(fallback_candidate)
-                audit_results[len(validated_candidates) - 1] = {
-                    "entailment_supported": True,
-                    "relevant_to_subquestion": True,
-                    "admitted_for_render": True,
-                    "derived_from_audited_candidates": True,
-                }
+                fallback_trigger = unresolved_adjacent_trigger(
+                    fallback_candidate, question, source_by_id
+                )
+                if fallback_trigger:
+                    item["unresolved_trigger"] = fallback_trigger
+                else:
+                    validated_candidates.append(fallback_candidate)
+                    audit_results[len(validated_candidates) - 1] = {
+                        "entailment_supported": True,
+                        "relevant_to_subquestion": True,
+                        "admitted_for_render": True,
+                        "derived_from_audited_candidates": True,
+                    }
         supported_candidates = [
             candidate
             for index, candidate in enumerate(validated_candidates)
@@ -2283,6 +2428,23 @@ def query_sop():
                 )
                 for source, reason in item["inapplicable_sources"]
             )
+            trigger_info = item.get("unresolved_trigger")
+            if trigger_info:
+                trigger_source = source_by_id.get(trigger_info.get("source_id"))
+                if trigger_source is not None:
+                    trigger_citation = build_citation(
+                        trigger_source,
+                        citation_preview(trigger_source.chunk_text),
+                        False,
+                        applicability_status="applicable",
+                        condition_result="unresolved",
+                        condition_reason=(
+                            "The adjacent trigger facts are not established by the "
+                            "question."
+                        ),
+                    )
+                    trigger_citation["context_only"] = True
+                    rejected_conclusion_citations.append(trigger_citation)
             rejected_conclusion_citations = dedupe_citations(
                 rejected_conclusion_citations
             )
@@ -2386,6 +2548,34 @@ def query_sop():
                 for row in unresolved_guarantor_rows:
                     row.setdefault("artifact_subquestion_id", item["subquestion_id"])
                 guarantor_rows = unresolved_guarantor_rows
+                no_provision = False
+            elif item.get("unresolved_trigger"):
+                support_status = "not_established"
+                unresolved_reason = (
+                    "The question does not establish whether the condition immediately "
+                    "preceding the operative passage is met."
+                )
+                trigger_text = item["unresolved_trigger"]["text"].rstrip(" :;")
+                support_note = (
+                    f"{NOT_ESTABLISHED} {unresolved_reason} "
+                    f"Trigger: {trigger_text}."
+                )
+                propositions = [
+                    {
+                        "artifact_subquestion_id": item["subquestion_id"],
+                        "text": candidate["text"],
+                        "citations": candidate["citations"],
+                        "arithmetic_valid": candidate.get("arithmetic_valid", True),
+                    }
+                    for candidate in matching
+                ]
+                answer = support_note
+                if propositions:
+                    answer += "\n\n" + "\n\n".join(
+                        proposition["text"] for proposition in propositions
+                    )
+                    for proposition in propositions:
+                        all_citations.extend(proposition["citations"])
                 no_provision = False
             elif generated_conclusion_text or rejected_conclusion_citations:
                 if item["inapplicable_sources"] and not item["sources_available"]:
@@ -2570,6 +2760,10 @@ def decompose_question(client: OpenAI, question: str) -> list[dict[str, Any]]:
                         "number, dollar amount, ownership percentage, entity role, and term "
                         "of art exactly. Record concrete facts in the prompt that may "
                         "implicate an additional SOP provision even if not directly asked. "
+                        "Keep each distinct material fact and conditional trigger as a "
+                        "separate retrieval seed, and include the user's own wording for "
+                        "each issue in search_terms. Do not let one policy issue replace "
+                        "another fact dimension in the prompt. "
                         "Use the user's terms and neutral retrieval synonyms only as "
                         "retrieval seeds. Do not invent a policy conclusion, and do not "
                         "select from a fixed list of known issue types. The canonical "
@@ -2663,6 +2857,81 @@ def decompose_question(client: OpenAI, question: str) -> list[dict[str, Any]]:
     return fallback_plan(question)
 
 
+def fetch_adjacent_chunk_rows(
+    conn: Any,
+    anchors: list[RetrievedSource],
+    sop_version: str,
+    corpus_sha256: str,
+) -> list[tuple]:
+    """Fetch immediate context only when it shares an anchor's section breadcrumb."""
+    rows: list[tuple] = []
+    seen: set[int] = set()
+    ranked_anchors = sorted(anchors, key=lambda source: source.similarity, reverse=True)
+    for anchor in ranked_anchors[:TOP_K]:
+        if anchor.similarity < MIN_RETRIEVAL_SIMILARITY or not anchor.section_ref:
+            continue
+        adjacent_ids = [anchor.db_id - 1, anchor.db_id + 1]
+        adjacent = conn.execute(
+            """
+            SELECT id, sop_version, effective_date, page_number, section_ref,
+                   chunk_text, GREATEST(%s, %s) AS similarity,
+                   transaction_types, entity_structures, party_roles, program_scopes,
+                   product_lines, loan_size_bands
+            FROM sop_chunks
+            WHERE sop_version = %s AND corpus_sha256 = %s
+              AND id = ANY(%s) AND section_ref = %s
+            ORDER BY id
+            """,
+            (
+                anchor.similarity - 0.01,
+                MIN_RETRIEVAL_SIMILARITY,
+                sop_version,
+                corpus_sha256,
+                adjacent_ids,
+                anchor.section_ref,
+            ),
+        ).fetchall()
+        for row in adjacent:
+            if row[0] in seen:
+                continue
+            seen.add(row[0])
+            rows.append(row)
+    return rows
+
+
+def select_context_sources(
+    sources: list[RetrievedSource],
+    limit: int = MAX_CONTEXT_SOURCES,
+) -> list[RetrievedSource]:
+    """Keep immediate same-section neighbors together when trimming model context."""
+    by_db_id = {source.db_id: source for source in sources}
+    ordered = sorted(sources, key=lambda source: source.similarity, reverse=True)
+    selected: list[RetrievedSource] = []
+    selected_ids: set[int] = set()
+    for source in ordered:
+        if source.db_id in selected_ids:
+            continue
+        group = [source]
+        for adjacent_id in (source.db_id - 1, source.db_id + 1):
+            neighbor = by_db_id.get(adjacent_id)
+            if (
+                neighbor is not None
+                and neighbor.section_ref == source.section_ref
+                and neighbor.db_id not in selected_ids
+            ):
+                group.append(neighbor)
+        remaining = limit - len(selected)
+        if len(group) <= remaining:
+            selected.extend(group)
+            selected_ids.update(item.db_id for item in group)
+        elif remaining > 0:
+            selected.append(source)
+            selected_ids.add(source.db_id)
+        if len(selected) >= limit:
+            break
+    return selected
+
+
 def retrieve_for_subquestion(
     conn: Any,
     client: OpenAI,
@@ -2670,9 +2939,19 @@ def retrieve_for_subquestion(
     search_terms: list[str] | None = None,
     sop_version: str = DEFAULT_SOP_VERSION,
     corpus_sha256: str = "",
+    material_facts: list[str] | None = None,
+    original_question: str = "",
 ) -> list[RetrievedSource]:
-    searches = list(dict.fromkeys([subquestion, *(search_terms or [])]))
-    if GUARANTY_TERMS.search(subquestion):
+    searches = build_retrieval_searches(
+        subquestion,
+        search_terms,
+        material_facts,
+        original_question,
+    )
+    retrieval_context = " ".join(
+        [subquestion, *(search_terms or []), *(material_facts or []), original_question]
+    )
+    if has_guaranty_intent(retrieval_context):
         searches.append(GUARANTY_RETRIEVAL_QUERY)
     if re.search(r"\b(robs|401\s*\(k\)|retirement trust|plan sponsor|plan trustee)\b", subquestion, re.IGNORECASE):
         searches.append(ROBS_RETRIEVAL_QUERY)
@@ -2693,6 +2972,7 @@ def retrieve_for_subquestion(
         )
 
     by_db_id: dict[int, RetrievedSource] = {}
+    vector_anchor_ids: set[int] = set()
 
     def add_rows(rows: list[tuple]) -> None:
         for row in rows:
@@ -2741,7 +3021,46 @@ def retrieve_for_subquestion(
             (query_vector, sop_version, corpus_sha256, query_vector, TOP_K),
         ).fetchall()
         add_rows(rows)
-    if GUARANTY_TERMS.search(subquestion):
+        vector_anchor_ids.update(row[0] for row in rows)
+    for lexical_query in lexical_retrieval_seeds(
+        subquestion,
+        search_terms,
+        material_facts,
+        original_question,
+    ):
+        rows = conn.execute(
+            """
+            WITH query AS (
+                SELECT websearch_to_tsquery('english', %s) AS terms
+            )
+            SELECT id, sop_version, effective_date, page_number, section_ref,
+                   chunk_text,
+                   LEAST(
+                       0.65,
+                       0.35 + ts_rank_cd(
+                           to_tsvector('english', coalesce(section_ref, '') || ' ' || chunk_text),
+                           query.terms,
+                           32
+                       ) * 0.30
+                   ) AS similarity,
+                   transaction_types, entity_structures, party_roles, program_scopes,
+                   product_lines, loan_size_bands
+            FROM sop_chunks, query
+            WHERE sop_version = %s AND corpus_sha256 = %s
+              AND to_tsvector(
+                  'english', coalesce(section_ref, '') || ' ' || chunk_text
+              ) @@ query.terms
+            ORDER BY ts_rank_cd(
+                to_tsvector('english', coalesce(section_ref, '') || ' ' || chunk_text),
+                query.terms
+            ) DESC
+            LIMIT %s
+            """,
+            (lexical_query, sop_version, corpus_sha256, TOP_K),
+        ).fetchall()
+        add_rows(rows)
+        vector_anchor_ids.update(row[0] for row in rows)
+    if has_guaranty_intent(retrieval_context):
         direct_rows = conn.execute(
             """
             SELECT id, sop_version, effective_date, page_number, section_ref,
@@ -2761,11 +3080,11 @@ def retrieve_for_subquestion(
         add_rows(direct_rows)
     if re.search(
         r"\besop\b|employee stock ownership",
-        subquestion,
+        retrieval_context,
         re.IGNORECASE,
     ) or any(
         re.search(r"\besop\b|employee stock ownership", term, re.IGNORECASE)
-        for term in (search_terms or [])
+        for term in searches
     ):
         esop_rows = conn.execute(
             """
@@ -2785,15 +3104,15 @@ def retrieve_for_subquestion(
         ).fetchall()
         add_rows(esop_rows)
     product_pattern = None
-    if re.search(r"sba\s+express|7\s*\(\s*a\s*\)\s+small", subquestion, re.IGNORECASE):
+    if re.search(r"sba\s+express|7\s*\(\s*a\s*\)\s+small", retrieval_context, re.IGNORECASE):
         product_pattern = "%7(a) Small%"
-    elif re.search(r"export\s+working\s+capital", subquestion, re.IGNORECASE):
+    elif re.search(r"export\s+working\s+capital", retrieval_context, re.IGNORECASE):
         product_pattern = "%Export Working Capital%"
-    elif re.search(r"international\s+trade", subquestion, re.IGNORECASE):
+    elif re.search(r"international\s+trade", retrieval_context, re.IGNORECASE):
         product_pattern = "%International Trade%"
-    elif re.search(r"\bcaplines\b", subquestion, re.IGNORECASE):
+    elif re.search(r"\bcaplines\b", retrieval_context, re.IGNORECASE):
         product_pattern = "%CAPLines%"
-    elif re.search(r"\bmarc\b", subquestion, re.IGNORECASE):
+    elif re.search(r"\bmarc\b", retrieval_context, re.IGNORECASE):
         product_pattern = "%MARC%"
     if product_pattern:
         product_rows = conn.execute(
@@ -2811,7 +3130,7 @@ def retrieve_for_subquestion(
             (sop_version, corpus_sha256, product_pattern),
         ).fetchall()
         add_rows(product_rows)
-    if re.search(r"\bcollateral\b", f"{subquestion} {' '.join(search_terms or [])}", re.IGNORECASE):
+    if re.search(r"\bcollateral\b", retrieval_context, re.IGNORECASE):
         collateral_rows = conn.execute(
             """
             SELECT id, sop_version, effective_date, page_number, section_ref,
@@ -2832,7 +3151,7 @@ def retrieve_for_subquestion(
     if re.search(
         r"seller[-\s]?financ|seller note|standby|subordinated debt|equity injection|"
         r"project cost|startup|start-up|injection",
-        f"{subquestion} {' '.join(search_terms or [])}",
+        retrieval_context,
         re.IGNORECASE,
     ):
         equity_rows = conn.execute(
@@ -2854,6 +3173,17 @@ def retrieve_for_subquestion(
             (sop_version, corpus_sha256),
         ).fetchall()
         add_rows(equity_rows)
+    adjacent_rows = fetch_adjacent_chunk_rows(
+        conn,
+        [
+            by_db_id[db_id]
+            for db_id in vector_anchor_ids
+            if db_id in by_db_id
+        ],
+        sop_version,
+        corpus_sha256,
+    )
+    add_rows(adjacent_rows)
     return [
         source
         for source in sorted(
@@ -2909,7 +3239,12 @@ def generate_propositions(
                     "Then provide atomic supporting policy propositions, each with a "
                     "citation. A proposition is allowed only when its cited passage "
                     "actually states the complete proposition. Do not use general legal, "
-                    "lending, or tax knowledge. Preserve SOP terms of art exactly: plan "
+                    "lending, or tax knowledge. Preserve a cited rule's condition and "
+                    "trigger, including one supplied by an adjacent passage; do not "
+                    "treat an unstated trigger as satisfied. If the question omits a "
+                    "fact needed to apply a conditional rule, state the rule conditionally "
+                    "and identify the missing fact instead of giving an unconditional "
+                    "eligibility result. Preserve SOP terms of art exactly: plan "
                     "sponsor, plan participant, plan trustee, Borrower, Co-Borrower, "
                     "Applicant, and Operating Company are distinct roles. Apply dollar "
                     "amounts and ownership percentages from the prompt. Show arithmetic "
@@ -3136,6 +3471,190 @@ def validate_candidate_citations(
     return valid_candidates
 
 
+ISSUE_AUDIT_STOPWORDS = {
+    "about", "also", "among", "any", "applicable", "application", "apply",
+    "applies", "business", "circumstance", "company", "eligible", "eligibility",
+    "entity", "fact", "facts", "financing", "individual", "issue", "lender",
+    "loan", "loans", "matter", "must", "owner", "owners", "party", "person",
+    "policy", "program", "provision", "question", "require", "required",
+    "requirement", "requirements", "rule", "rules", "sba", "scenario",
+    "should", "transaction", "transactions",
+}
+
+
+def issue_audit_terms(text: str) -> set[str]:
+    terms = set()
+    for raw in re.findall(r"[a-z0-9]+", text.casefold()):
+        if len(raw) < 4 or raw in ISSUE_AUDIT_STOPWORDS:
+            continue
+        token = raw
+        if token.endswith("ing") and len(token) > 6:
+            token = token[:-3]
+        elif token.endswith("ed") and len(token) > 5:
+            token = token[:-2]
+        elif token.endswith("ies") and len(token) > 5:
+            token = token[:-3] + "y"
+        elif token.endswith("tion") and len(token) > 8:
+            token = token[:-4]
+        elif token.endswith("s") and len(token) > 5:
+            token = token[:-1]
+        if len(token) >= 4 and token not in ISSUE_AUDIT_STOPWORDS:
+            terms.add(token)
+    return terms
+
+
+def issue_anchor_matches(left: str, right: str) -> bool:
+    if left == right:
+        return True
+    if min(len(left), len(right)) < 5:
+        return False
+    return SequenceMatcher(None, left, right).ratio() >= 0.78
+
+
+def conclusion_has_cited_issue_focus(
+    requested_question: str,
+    conclusion: str,
+    evidence: str,
+) -> bool:
+    """Require a conclusion's requested subject to occur in its cited material."""
+    requested_terms = issue_audit_terms(requested_question)
+    conclusion_terms = issue_audit_terms(conclusion)
+    evidence_terms = issue_audit_terms(evidence)
+    if not requested_terms or not conclusion_terms or not evidence_terms:
+        return True
+    shared_focus = {
+        requested
+        for requested in requested_terms
+        if any(issue_anchor_matches(requested, claim) for claim in conclusion_terms)
+    }
+    if not shared_focus:
+        return True
+    return any(
+        issue_anchor_matches(focus, cited)
+        for focus in shared_focus
+        for cited in evidence_terms
+    )
+
+
+CONDITIONAL_TRIGGER_RE = re.compile(
+    r"\b(?:if|when|unless|only\s+if|provided\s+that|in\s+the\s+event\s+that|where)\b",
+    re.IGNORECASE,
+)
+CONDITION_TRIGGER_STOPWORDS = {
+    "applicant", "applicants", "borrower", "borrowers", "if", "in", "is",
+    "less", "loan", "loans", "must", "only", "provided", "shall", "should",
+    "that", "the", "unless", "when", "where", "which", "whichever", "will",
+    "would",
+}
+UNRESOLVED_CONDITION_LANGUAGE_RE = re.compile(
+    r"\b(?:depends\s+on|cannot\s+(?:determine|conclude)|"
+    r"not\s+(?:stated|provided|established|specified|known|clear)|"
+    r"missing\s+(?:fact|information|amount|percentage|detail)|"
+    r"insufficient\s+(?:facts|information)|unknown|unclear)\b",
+    re.IGNORECASE,
+)
+
+
+def condition_trigger_terms(text: str) -> set[str]:
+    terms = issue_audit_terms(text) - CONDITION_TRIGGER_STOPWORDS
+    normalized = set()
+    for term in terms:
+        if term in {"leas", "lease", "leased"}:
+            normalized.add("lease")
+        else:
+            normalized.add(term)
+    return normalized
+
+
+def condition_trigger_is_established(trigger: str, fact_text: str) -> bool:
+    """Conservatively check whether a split, conditional trigger is stated."""
+    trigger_lower = trigger.casefold()
+    facts_lower = fact_text.casefold()
+    has_currency = bool(re.search(r"\$\s*\d", trigger_lower))
+    has_percentage = bool(
+        re.search(r"\d+(?:\.\d+)?\s*(?:%|percent)\b", trigger_lower)
+    )
+    if "whichever is less" in trigger_lower and has_currency and has_percentage:
+        if not (
+            re.search(r"\$\s*\d", facts_lower)
+            and re.search(r"\d+(?:\.\d+)?\s*(?:%|percent)\b", facts_lower)
+        ):
+            return False
+    elif has_currency and not re.search(r"\$\s*\d", facts_lower):
+        return False
+    elif has_percentage and not re.search(
+        r"\d+(?:\.\d+)?\s*(?:%|percent)\b", facts_lower
+    ):
+        return False
+
+    trigger_terms = condition_trigger_terms(trigger)
+    fact_terms = condition_trigger_terms(fact_text)
+    if not trigger_terms:
+        return False
+    overlap = len(trigger_terms & fact_terms) / len(trigger_terms)
+    return overlap >= (0.30 if has_currency and has_percentage else 0.55)
+
+
+def conclusion_preserves_unresolved_trigger(
+    conclusion: str, trigger: str
+) -> bool:
+    if UNRESOLVED_CONDITION_LANGUAGE_RE.search(conclusion):
+        return True
+    if not CONDITIONAL_TRIGGER_RE.search(conclusion):
+        return False
+    trigger_terms = condition_trigger_terms(trigger)
+    conclusion_terms = condition_trigger_terms(conclusion)
+    if not trigger_terms:
+        return False
+    overlap = len(trigger_terms & conclusion_terms) / len(trigger_terms)
+    return overlap >= 0.30
+
+
+def unresolved_adjacent_trigger(
+    candidate: dict[str, Any],
+    original_question: str,
+    source_by_id: dict[int, RetrievedSource],
+) -> dict[str, Any] | None:
+    """Find a conditional lead-in split immediately before a cited passage."""
+    source_by_db_id = {
+        source.db_id: source for source in source_by_id.values()
+    }
+    allowed_source_ids = set(candidate.get("applicable_source_ids", []))
+    fact_text = " ".join(
+        [
+            original_question,
+            candidate.get("requested_question", ""),
+            candidate.get("subquestion", ""),
+        ]
+    )
+    conclusion = candidate.get("text", "")
+    for citation in candidate.get("citations", []):
+        source = source_by_id.get(citation.get("source_id"))
+        if source is None:
+            continue
+        previous = source_by_db_id.get(source.db_id - 1)
+        if (
+            previous is None
+            or previous.source_id not in allowed_source_ids
+            or previous.sop_version != source.sop_version
+            or previous.effective_date != source.effective_date
+            or previous.section_ref != source.section_ref
+        ):
+            continue
+        previous_text = previous.chunk_text.rstrip()
+        if not previous_text.endswith(":"):
+            continue
+        trigger = re.split(r"\n\s*\n", previous_text)[-1].strip()
+        if not CONDITIONAL_TRIGGER_RE.search(trigger):
+            continue
+        if condition_trigger_is_established(trigger, fact_text):
+            continue
+        if conclusion_preserves_unresolved_trigger(conclusion, trigger):
+            continue
+        return {"text": trigger, "source_id": previous.source_id}
+    return None
+
+
 def audit_propositions(
     client: OpenAI,
     original_question: str,
@@ -3145,15 +3664,43 @@ def audit_propositions(
     if not candidates:
         return {}
     audit_items = []
+    source_by_db_id = {
+        source.db_id: source for source in source_by_id.values()
+    }
     for index, candidate in enumerate(candidates):
         evidence = []
+        cited_sources: list[RetrievedSource] = []
         for citation in candidate["citations"]:
             source = source_by_id[citation["source_id"]]
+            cited_sources.append(source)
             evidence.append(
                 {
                     "source_id": source.source_id,
                     "section_ref": source.section_ref,
+                    "source_context": source.chunk_text[:1800],
                     "quote": citation["quote"],
+                }
+            )
+        allowed_source_ids = set(candidate.get("applicable_source_ids", []))
+        context_neighbors: dict[int, RetrievedSource] = {}
+        for source in cited_sources:
+            for adjacent_id in (source.db_id - 1, source.db_id + 1):
+                neighbor = source_by_db_id.get(adjacent_id)
+                if (
+                    neighbor is not None
+                    and neighbor.source_id in allowed_source_ids
+                    and neighbor.section_ref == source.section_ref
+                    and neighbor.source_id
+                    not in {item.source_id for item in cited_sources}
+                ):
+                    context_neighbors[neighbor.source_id] = neighbor
+        for neighbor in context_neighbors.values():
+            evidence.append(
+                {
+                    "source_id": neighbor.source_id,
+                    "section_ref": neighbor.section_ref,
+                    "source_context": neighbor.chunk_text[:1800],
+                    "context_only": True,
                 }
             )
         audit_items.append(
@@ -3185,9 +3732,21 @@ def audit_propositions(
                         "proposition about a related subject, shared party, "
                         "shared threshold, or nearby section is not relevant. Supporting "
                         "propositions must be completely stated by their cited quote. "
+                        "An evidence item marked context_only is included only to reveal "
+                        "a nearby condition or limitation; it is not a citation and "
+                        "cannot by itself support a claim. "
                         "An applied conclusion may apply a directly stated SOP rule to "
                         "the concrete facts in the original question; the quote need "
-                        "not repeat those facts. Verify every actor, threshold, "
+                        "not repeat those facts. Identify the operative subject and "
+                        "trigger in each cited passage; shared transaction facts do not "
+                        "make a provision responsive to a different issue. Silence or "
+                        "a rule about an adjacent subject cannot establish that an "
+                        "unaddressed condition has no effect. A negative or categorical "
+                        "eligibility conclusion requires affirmative language that "
+                        "covers that eligibility issue. If a cited provision is "
+                        "conditional and the question does not establish its trigger, "
+                        "use nearby context_only passages to identify the trigger and "
+                        "do not state an unconditional applied result. Verify every actor, threshold, "
                         "exception, amount, comparison, and computed result. Reject "
                         "claims that add unstated content. Do not repair or rewrite "
                         "propositions. If the policy issue is absent or the item "
@@ -3250,6 +3809,39 @@ def audit_propositions(
             )
         }
         for index, candidate in enumerate(candidates):
+            if candidate.get("kind") == "conclusion":
+                cited_issue_text = "\n".join(
+                    "\n".join(
+                        [
+                            source_by_id[citation["source_id"]].section_ref,
+                            citation["quote"],
+                        ]
+                    )
+                    for citation in candidate["citations"]
+                    if citation.get("source_id") in source_by_id
+                )
+                requested_question = (
+                    candidate.get("requested_question")
+                    or candidate.get("subquestion")
+                    or original_question
+                )
+                if not conclusion_has_cited_issue_focus(
+                    requested_question,
+                    candidate.get("text", ""),
+                    cited_issue_text,
+                ):
+                    previous = checks.get(index, {})
+                    checks[index] = {
+                        "entailment_supported": previous.get(
+                            "entailment_supported", False
+                        ),
+                        "relevant_to_subquestion": False,
+                        "admitted_for_render": False,
+                    }
+                    app.logger.warning(
+                        "Withholding conclusion without cited issue focus: %s",
+                        candidate.get("text", ""),
+                    )
             policy_issue = candidate.get("policy_issue") or {}
             if not policy_issue.get("text") or policy_issue.get("unresolved"):
                 checks[index] = {
@@ -3259,6 +3851,25 @@ def audit_propositions(
                     "relevant_to_subquestion": False,
                     "admitted_for_render": False,
                 }
+        for index, candidate in enumerate(candidates):
+            trigger = unresolved_adjacent_trigger(
+                candidate, original_question, source_by_id
+            )
+            if trigger is None:
+                continue
+            previous = checks.get(index, {})
+            checks[index] = {
+                "entailment_supported": False,
+                "relevant_to_subquestion": previous.get(
+                    "relevant_to_subquestion", True
+                ),
+                "admitted_for_render": False,
+                "unresolved_trigger": trigger,
+            }
+            app.logger.warning(
+                "Withholding claim with unresolved adjacent conditional trigger: %s",
+                trigger["text"],
+            )
         return checks
     except Exception:
         app.logger.exception("Citation audit failed; withholding unsupported claims")

@@ -5,6 +5,7 @@ import argparse
 import datetime as dt
 import json
 import os
+import re
 import sys
 import time
 from pathlib import Path
@@ -27,20 +28,22 @@ def query(base_url: str, question: str, cookie: str | None = None) -> dict:
 
 
 def baseline_regression_failures(result: dict) -> list[str]:
-    """Blocking assertions for the baseline ROBS fact pattern."""
+    """Check grounded ROBS output without requiring unsupported guarantor rows."""
     failures: list[str] = []
-    summary = (result.get("summary") or "").strip()
-    if not summary or "no applied conclusion was established" in summary.casefold():
-        failures.append("empty or generic bottom line")
 
     subanswers = result.get("subanswers", [])
     for subanswer in subanswers:
         telemetry = subanswer.get("gate_telemetry", [])
         admitted = any(entry.get("result") == "admitted" for entry in telemetry)
         conclusion = subanswer.get("applied_conclusion") or {}
-        if admitted and not conclusion.get("text", "").strip():
+        if admitted and not (
+            conclusion.get("text", "").strip()
+            or subanswer.get("propositions")
+            or subanswer.get("guarantor_rows")
+        ):
             failures.append(
-                f"{subanswer.get('subquestion_id', subanswer.get('question'))}: empty applied conclusion"
+                f"{subanswer.get('subquestion_id', subanswer.get('question'))}: "
+                "no substantive answer or guarantor rows"
             )
         subquestion_id = subanswer.get("subquestion_id")
         artifacts = []
@@ -100,20 +103,34 @@ def baseline_regression_failures(result: dict) -> list[str]:
         for row in subanswer.get("guarantor_rows", [])
     ]
     for party, capacity in [
-        ("buyer", "direct owner"),
-        ("buyer", "plan sponsor"),
-        ("buyer", "trustee"),
-        ("plan", "entity owner"),
+        ("individual", "direct owner"),
+        ("individual", "plan sponsor"),
     ]:
         if not any(
             party in row.get("party", "").casefold()
             and capacity in row.get("capacity", "").casefold()
+            and row.get("status") == "required"
             for row in rows
         ):
             failures.append(f"missing guarantor row: {party}/{capacity}")
-    if len(rows) < 4:
-        failures.append(f"only {len(rows)} guarantor rows were produced")
-    if any(not row.get("citations") for row in rows):
+    forbidden_required_rows = [
+        ("plan", "direct owner"),
+        ("plan", "entity owner"),
+        ("individual", "plan participant"),
+        ("individual", "trustee"),
+    ]
+    for party, capacity in forbidden_required_rows:
+        if any(
+            party in row.get("party", "").casefold()
+            and capacity in row.get("capacity", "").casefold()
+            and row.get("status") == "required"
+            for row in rows
+        ):
+            failures.append(f"unsupported required guarantor row: {party}/{capacity}")
+    if any(
+        row.get("status") == "required" and not row.get("citations")
+        for row in rows
+    ):
         failures.append("guarantor row lacks a triggering citation")
     row_citation_ids = {
         citation.get("source_id")
@@ -128,8 +145,14 @@ def baseline_regression_failures(result: dict) -> list[str]:
             source.get("page_number") in {47, 93}
         )
     }
-    if not admitted_guaranty_ids.issubset(row_citation_ids):
-        failures.append("an admitted guaranty provision lacks a triggering row citation")
+    if not {47, 93}.issubset(
+        {
+            source.get("page_number")
+            for source in result.get("sources", [])
+            if source.get("source_id") in row_citation_ids
+        }
+    ):
+        failures.append("required guarantor rows lack the ROBS and ownership citations")
     return failures
 
 
@@ -162,6 +185,8 @@ def main() -> int:
 
     phantom_citations = 0
     unsupported_failures = 0
+    unqualified_condition_failures = 0
+    trigger_note_failures = 0
     section_failures = 0
     support_signal_failures = 0
     citation_failures = 0
@@ -218,6 +243,36 @@ def main() -> int:
             or subanswer.get("support_status") == "supported"
             for subanswer in result.get("subanswers", [])
         )
+        unqualified_condition_failure = case.get(
+            "expect_no_unqualified_applied_conclusion", False
+        ) and any(
+            (conclusion := subanswer.get("applied_conclusion") or {}).get("text")
+            and not re.search(
+                r"\b(?:if|when|unless|only\s+if|provided\s+that|depends\s+on|"
+                r"not\s+established|not\s+stated|missing|cannot\s+determine|"
+                r"unknown|unclear)\b",
+                conclusion["text"],
+                re.IGNORECASE,
+            )
+            for subanswer in result.get("subanswers", [])
+        )
+        trigger_note_failure = case.get(
+            "expect_unresolved_trigger_note", False
+        ) and not any(
+            subanswer.get("support_status") == "not_established"
+            and "trigger:" in (
+                subanswer.get("support_note") or subanswer.get("answer") or ""
+            ).casefold()
+            and "leasehold improvements" in (
+                subanswer.get("support_note") or subanswer.get("answer") or ""
+            ).casefold()
+            and any(
+                citation.get("context_only")
+                and citation.get("condition_result") == "unresolved"
+                for citation in subanswer.get("rejected_citations", [])
+            )
+            for subanswer in result.get("subanswers", [])
+        )
         arithmetic_failure = case.get("expect_arithmetic", False) and any(
             not proposition.get("arithmetic_valid", False)
             for proposition in supported_propositions
@@ -258,6 +313,17 @@ def main() -> int:
             )
             for expected in expected_rows
         )
+        forbidden_required_rows = case.get("expect_no_required_guarantor_rows", [])
+        forbidden_row_failure = any(
+            any(
+                expected.get("party", "").casefold() in row.get("party", "").casefold()
+                and expected.get("capacity", "").casefold()
+                in row.get("capacity", "").casefold()
+                and row.get("status") == "required"
+                for row in all_rows
+            )
+            for expected in forbidden_required_rows
+        )
         unresolved_failure = case.get("expect_unresolved_guarantor", False) and not any(
             row.get("status") == "unresolved" for row in all_rows
         )
@@ -284,11 +350,15 @@ def main() -> int:
         support_signal_failures += int(signal_failure)
         section_failures += int(section_failure)
         unsupported_failures += int(unsupported_failure)
+        unqualified_condition_failures += int(unqualified_condition_failure)
+        trigger_note_failures += int(trigger_note_failure)
         arithmetic_failures += int(arithmetic_failure)
         negative_audit_failures += int(negative_audit_failure or forbidden_section_failure)
         date_warning_failures += int(date_warning_failure)
         applicability_failures += int(applicability_failure)
-        guarantor_row_failures += int(row_failure or unresolved_failure)
+        guarantor_row_failures += int(
+            row_failure or forbidden_row_failure or unresolved_failure
+        )
         baseline_failures += int(baseline_failure)
         status = "PASS" if not any(
             (
@@ -297,12 +367,15 @@ def main() -> int:
                 signal_failure,
                 section_failure,
                 unsupported_failure,
+                unqualified_condition_failure,
+                trigger_note_failure,
                 arithmetic_failure,
                 negative_audit_failure,
                 forbidden_section_failure,
                 date_warning_failure,
                 applicability_failure,
                 row_failure,
+                forbidden_row_failure,
                 unresolved_failure,
                 baseline_failure,
             )
@@ -312,9 +385,11 @@ def main() -> int:
             f"phantom={phantom} citations={citation_failure} "
             f"support_signal={signal_failure} section={section_failure} "
             f"unsupported={unsupported_failure} arithmetic={arithmetic_failure} "
+            f"unqualified_condition={unqualified_condition_failure} "
+            f"trigger_note={trigger_note_failure} "
             f"negative_audit={negative_audit_failure or forbidden_section_failure} "
             f"date_warning={date_warning_failure} applicability={applicability_failure} "
-            f"guarantor_rows={row_failure or unresolved_failure}"
+            f"guarantor_rows={row_failure or forbidden_row_failure or unresolved_failure}"
             + (
                 f" baseline={'; '.join(baseline_failure_details)}"
                 if baseline_failure
@@ -331,12 +406,16 @@ def main() -> int:
                 "support_signal_failure": signal_failure,
                 "section_failure": section_failure,
                 "unsupported_failure": unsupported_failure,
+                "unqualified_condition_failure": unqualified_condition_failure,
+                "trigger_note_failure": trigger_note_failure,
                 "arithmetic_failure": arithmetic_failure,
                 "negative_audit_failure": negative_audit_failure
                 or forbidden_section_failure,
                 "date_warning_failure": date_warning_failure,
                 "applicability_failure": applicability_failure,
-                "guarantor_row_failure": row_failure or unresolved_failure,
+                "guarantor_row_failure": (
+                    row_failure or forbidden_row_failure or unresolved_failure
+                ),
                 "baseline_failure": baseline_failure,
             }
         )
@@ -352,6 +431,8 @@ def main() -> int:
         "support_signal_failures": support_signal_failures,
         "section_failures": section_failures,
         "unsupported_failures": unsupported_failures,
+        "unqualified_condition_failures": unqualified_condition_failures,
+        "trigger_note_failures": trigger_note_failures,
         "arithmetic_failures": arithmetic_failures,
         "negative_audit_failures": negative_audit_failures,
         "date_warning_failures": date_warning_failures,

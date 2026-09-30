@@ -203,8 +203,13 @@
     "unsupported": false,
     "expect_guarantor_rows": [
       {"party": "individual", "capacity": "direct owner", "status": "required"},
-      {"party": "individual", "capacity": "plan sponsor", "status": "required"},
-      {"party": "plan", "capacity": "entity owner", "status": "required"}
+      {"party": "individual", "capacity": "plan sponsor", "status": "required"}
+    ],
+    "expect_no_required_guarantor_rows": [
+      {"party": "plan", "capacity": "direct owner"},
+      {"party": "plan", "capacity": "entity owner"},
+      {"party": "individual", "capacity": "plan participant"},
+      {"party": "individual", "capacity": "trustee"}
     ],
     "expect_arithmetic": true
   },
@@ -231,5 +236,35 @@
       {"party": "party identified", "capacity": "unresolved guarantor capacity", "status": "unresolved"}
     ],
     "expect_unresolved_guarantor": true
+  },
+  {
+    "id": "lease-fact-retrieval-and-condition-context",
+    "question": "A borrower operates from business premises under a month-to-month lease. Does that lease term by itself make the business ineligible, and what facts determine which lease rule applies?",
+    "expected_sections": ["Occupancy and Leasing Requirements"],
+    "expected_facts": ["leasehold improvements", "written lease"],
+    "unsupported": false,
+    "expect_no_unqualified_applied_conclusion": true,
+    "expect_unresolved_trigger_note": true
+  },
+  {
+    "id": "affiliation-issue-retrieval",
+    "question": "How are affiliated businesses treated when determining whether an applicant meets the SBA size standard?",
+    "expected_sections": ["Affiliation"],
+    "expected_facts": ["affiliated businesses", "size standard"],
+    "unsupported": false
+  },
+  {
+    "id": "use-of-proceeds-debt-refinancing",
+    "question": "May SBA loan proceeds be used to refinance existing debt?",
+    "expected_sections": ["Debt Refinancing"],
+    "expected_facts": ["refinance existing debt"],
+    "unsupported": false
+  },
+  {
+    "id": "504-debenture-retrieval",
+    "question": "What requirements apply to a 504 loan financed through a debenture?",
+    "expected_sections": ["504 Loan Program Specific Requirements"],
+    "expected_facts": ["504 loan", "debenture"],
+    "unsupported": false
   }
 ]
