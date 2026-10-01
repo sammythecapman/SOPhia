@@ -193,6 +193,42 @@ def _visible_answer_text(result: dict) -> str:
     return "\n".join(parts)
 
 
+def select_cases(cases: list[dict], case_ids: list[str] | None = None) -> list[dict]:
+    """Select requested regression cases in the order supplied."""
+    if not case_ids:
+        return cases
+    by_id = {case["id"]: case for case in cases}
+    requested = list(dict.fromkeys(case_ids))
+    missing = [case_id for case_id in requested if case_id not in by_id]
+    if missing:
+        raise ValueError(f"Unknown regression case ID(s): {', '.join(missing)}")
+    return [by_id[case_id] for case_id in requested]
+
+
+def handcheck_details(result: dict) -> dict:
+    """Capture a concise answer and source citations without internal telemetry."""
+    citation_fields = (
+        "source_id",
+        "section_ref",
+        "page_number",
+        "quote",
+        "applicability_status",
+        "verified",
+        "quote_located",
+    )
+    return {
+        "sample_answer": _visible_answer_text(result),
+        "source_citations": [
+            {
+                field: source.get(field)
+                for field in citation_fields
+                if source.get(field) is not None
+            }
+            for source in result.get("sources", [])
+        ],
+    }
+
+
 def _fact_tokens(text: str) -> list[str]:
     normalized = text.casefold()
     normalized = re.sub(
@@ -248,6 +284,11 @@ def main() -> int:
         type=Path,
         default=Path("tests/sop_regression.json"),
     )
+    parser.add_argument(
+        "--case-id",
+        action="append",
+        help="Run only this case; repeat to select several. Use this for a focused first hand-check.",
+    )
     parser.add_argument("--base-url", default="http://127.0.0.1:8080")
     parser.add_argument(
         "--cookie",
@@ -270,7 +311,10 @@ def main() -> int:
         help="Pause between cases to stay below a deployment's rate limit.",
     )
     args = parser.parse_args()
-    cases = json.loads(args.cases.read_text())
+    try:
+        cases = select_cases(json.loads(args.cases.read_text()), args.case_id)
+    except ValueError as exc:
+        parser.error(str(exc))
     health, health_error = fetch_healthz(args.base_url)
     corpus_hash_failure = bool(
         args.expected_source_sha256
@@ -554,6 +598,7 @@ def main() -> int:
                 "baseline_failure": baseline_failure,
                 "expected_fact_failure": expected_fact_failure,
                 "missing_expected_facts": missing_expected_facts,
+                **handcheck_details(result),
             }
         )
         if args.delay_seconds > 0 and case is not cases[-1]:

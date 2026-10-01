@@ -215,69 +215,98 @@ def ingest(
 ) -> None:
     if not os.getenv("OPENAI_API_KEY") or not os.getenv("DATABASE_URL"):
         raise RuntimeError("OPENAI_API_KEY and DATABASE_URL are required for ingestion.")
+
+    database_keys = {
+        (item["section_ref"], item["chunk_text"])
+        for item in chunks
+    }
+    if len(database_keys) != len(chunks):
+        raise RuntimeError("Source extraction produced duplicate database chunk keys.")
+
     client = OpenAI()
-    inserted = 0
+    embedded_chunks: list[tuple[dict[str, str], list[float]]] = []
+    for start in range(0, len(chunks), BATCH_SIZE):
+        batch = chunks[start : start + BATCH_SIZE]
+        embeddings = embed_with_retry(client, [item["chunk_text"] for item in batch])
+        if len(embeddings) != len(batch):
+            raise RuntimeError(
+                f"Embedding count mismatch: expected {len(batch)}, received {len(embeddings)}."
+            )
+        embedded_chunks.extend(zip(batch, embeddings))
+        print(f"Embedded {min(start + BATCH_SIZE, len(chunks))}/{len(chunks)} chunks")
+
+    upserted = 0
+    stale_removed = 0
     with connection() as conn:
-        for start in range(0, len(chunks), BATCH_SIZE):
-            batch = chunks[start : start + BATCH_SIZE]
-            embeddings = embed_with_retry(client, [item["chunk_text"] for item in batch])
-            with conn.transaction():
-                for item, embedding in zip(batch, embeddings):
-                    conn.execute(
-                        """
-                        INSERT INTO sop_chunks
-                            (sop_version, section_ref, chunk_text, effective_date, page_number,
-                            corpus_sha256, transaction_types, entity_structures, party_roles,
-                            program_scopes, product_lines, loan_size_bands,
-                             embedding)
-                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                        ON CONFLICT (sop_version, section_ref, chunk_hash)
-                        DO UPDATE SET
-                            embedding = EXCLUDED.embedding,
-                            effective_date = EXCLUDED.effective_date,
-                            page_number = EXCLUDED.page_number,
-                            corpus_sha256 = EXCLUDED.corpus_sha256,
-                            transaction_types = EXCLUDED.transaction_types,
-                            entity_structures = EXCLUDED.entity_structures,
-                            party_roles = EXCLUDED.party_roles,
-                            program_scopes = EXCLUDED.program_scopes,
-                            product_lines = EXCLUDED.product_lines,
-                            loan_size_bands = EXCLUDED.loan_size_bands
-                        """,
-                        (
-                            version,
-                            item["section_ref"],
-                            item["chunk_text"],
-                            effective_date,
-                            item["page_number"],
-                            sha256,
-                            item["transaction_types"],
-                            item["entity_structures"],
-                            item["party_roles"],
-                            item["program_scopes"],
-                            item["product_lines"],
-                            item["loan_size_bands"],
-                            embedding,
-                        ),
-                    )
-                    inserted += 1
-            print(f"Processed {min(start + BATCH_SIZE, len(chunks))}/{len(chunks)} chunks")
-        conn.execute(
-            """
-            INSERT INTO corpus_metadata
-                (edition, source_url, sha256, effective_date, chunk_count)
-            VALUES (%s, %s, %s, %s, %s)
-            ON CONFLICT (edition)
-            DO UPDATE SET
-                source_url = EXCLUDED.source_url,
-                sha256 = EXCLUDED.sha256,
-                effective_date = EXCLUDED.effective_date,
-                chunk_count = EXCLUDED.chunk_count,
-                ingested_at = NOW()
-            """,
-            (version, source_url, sha256, effective_date, len(chunks)),
-        )
-    print(f"Ingestion complete: {inserted} chunks inserted or refreshed.")
+        with conn.transaction():
+            for item, embedding in embedded_chunks:
+                conn.execute(
+                    """
+                    INSERT INTO sop_chunks
+                        (sop_version, section_ref, chunk_text, effective_date, page_number,
+                        corpus_sha256, transaction_types, entity_structures, party_roles,
+                        program_scopes, product_lines, loan_size_bands,
+                        embedding)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    ON CONFLICT (sop_version, section_ref, chunk_hash)
+                    DO UPDATE SET
+                        embedding = EXCLUDED.embedding,
+                        effective_date = EXCLUDED.effective_date,
+                        page_number = EXCLUDED.page_number,
+                        corpus_sha256 = EXCLUDED.corpus_sha256,
+                        transaction_types = EXCLUDED.transaction_types,
+                        entity_structures = EXCLUDED.entity_structures,
+                        party_roles = EXCLUDED.party_roles,
+                        program_scopes = EXCLUDED.program_scopes,
+                        product_lines = EXCLUDED.product_lines,
+                        loan_size_bands = EXCLUDED.loan_size_bands
+                    """,
+                    (
+                        version,
+                        item["section_ref"],
+                        item["chunk_text"],
+                        effective_date,
+                        item["page_number"],
+                        sha256,
+                        item["transaction_types"],
+                        item["entity_structures"],
+                        item["party_roles"],
+                        item["program_scopes"],
+                        item["product_lines"],
+                        item["loan_size_bands"],
+                        embedding,
+                    ),
+                )
+                upserted += 1
+
+            delete_cursor = conn.execute(
+                """
+                DELETE FROM sop_chunks
+                WHERE sop_version = %s
+                  AND corpus_sha256 IS DISTINCT FROM %s
+                """,
+                (version, sha256),
+            )
+            stale_removed = delete_cursor.rowcount
+            conn.execute(
+                """
+                INSERT INTO corpus_metadata
+                    (edition, source_url, sha256, effective_date, chunk_count)
+                VALUES (%s, %s, %s, %s, %s)
+                ON CONFLICT (edition)
+                DO UPDATE SET
+                    source_url = EXCLUDED.source_url,
+                    sha256 = EXCLUDED.sha256,
+                    effective_date = EXCLUDED.effective_date,
+                    chunk_count = EXCLUDED.chunk_count,
+                    ingested_at = NOW()
+                """,
+                (version, source_url, sha256, effective_date, len(chunks)),
+            )
+    print(
+        f"Ingestion complete: {upserted} chunks upserted; "
+        f"{stale_removed} stale chunks removed."
+    )
 
 
 def main() -> None:
