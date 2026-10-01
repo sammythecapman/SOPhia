@@ -14,6 +14,10 @@ A grounded question-answering tool for SBA SOP 50 10 8.
 - Production auth also requires `REPL_ID`; local development bypasses auth unless `NODE_ENV=production`
 - Production queries require `SOP_ALLOWED_EMAILS`, a comma-separated allowlist of verified account emails; missing or empty configuration denies access
 
+## Repository constraints
+
+- Do not create or modify anything in `.github/workflows/` unless the user explicitly asks.
+
 ## Stack
 
 - pnpm workspaces, Node.js 24, TypeScript 5.9
