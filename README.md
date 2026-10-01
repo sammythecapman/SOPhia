@@ -9,6 +9,7 @@ embeddings/chat completions for context-constrained answers.
 - `DATABASE_URL` — provided by the Replit PostgreSQL database
 - `OPENAI_API_KEY` — Replit Secret
 - `OPENAI_CHAT_MODEL` — optional; defaults to `gpt-4o-mini`
+- `SOP_ALLOWED_EMAILS` — production-only, comma-separated list of verified account emails; unset or empty denies production queries
 
 Never commit API keys. Add or update them through Replit Secrets.
 
@@ -37,26 +38,32 @@ The API is served under `/api`; `POST /api/sop/query` accepts:
 
 ## SOP ingestion: preview first, then approve
 
-Place one `.docx` in `attached_assets`, or pass its path explicitly.
+The current source is the SBA SOP 50 10 8.1 Technical Policy Updates document,
+effective October 1, 2026. Because the older edition is also retained in
+`attached_assets`, pass the source path explicitly:
 
 Preview only (guaranteed not to call the embedding API or write rows):
 
 ```bash
-uv run python scripts/ingest_sop.py
-# or
-uv run python scripts/ingest_sop.py path/to/SOP.docx
+uv run python scripts/ingest_sop.py \
+  attached_assets/SOP_50_10_8.1_Technical_Policy_Updates_effective_10.1.2026.docx
 ```
 
 Review section references and chunk text. To proceed, rerun:
 
 ```bash
-uv run python scripts/ingest_sop.py --ingest --version "SOP 50 10 8.1"
+uv run python scripts/ingest_sop.py \
+  attached_assets/SOP_50_10_8.1_Technical_Policy_Updates_effective_10.1.2026.docx \
+  --ingest
 ```
 
 The script then requires typing the exact displayed approval phrase. It batches
 embeddings, retries transient failures with exponential backoff, reports
-progress, and upserts on `(sop_version, section_ref, chunk_text)` so reruns are
-safe. Approval is never implied by `--ingest`.
+progress, derives the version and effective date from the document, and upserts
+on `(sop_version, section_ref, chunk_hash)` so reruns are safe. Approval is
+never implied by `--ingest`. The health endpoint reports the corpus SHA-256 so
+the technical revision can be distinguished from the prior document with the
+same SOP version label.
 
 The development database contains the approved SOP 50 10 8.1 corpus. The
 regression set in `tests/sop_regression.json` can be run with:

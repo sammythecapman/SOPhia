@@ -9,7 +9,7 @@ import re
 import sys
 import time
 from pathlib import Path
-from urllib.error import HTTPError
+from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 
@@ -156,6 +156,91 @@ def baseline_regression_failures(result: dict) -> list[str]:
     return failures
 
 
+def _visible_answer_text(result: dict) -> str:
+    """Collect answer text and structured answer rows, excluding source evidence."""
+    parts: list[str] = []
+    excluded = {
+        "citations",
+        "gate_telemetry",
+        "retrieval_telemetry",
+        "rejected_citations",
+        "source_chunk",
+        "chunk_text",
+        "quote",
+    }
+
+    def add(value, depth: int = 0) -> None:
+        if depth > 5 or value is None or isinstance(value, bool):
+            return
+        if isinstance(value, str):
+            parts.append(value)
+        elif isinstance(value, (int, float)):
+            parts.append(str(value))
+        elif isinstance(value, dict):
+            for key, child in value.items():
+                if key not in excluded and not key.endswith("_id"):
+                    add(child, depth + 1)
+        elif isinstance(value, list):
+            for child in value:
+                add(child, depth + 1)
+
+    for key in ("answer", "summary", "support_note", "date_warning"):
+        add(result.get(key))
+    add(result.get("other_issues", []))
+    for subanswer in result.get("subanswers", []):
+        for key in ("answer", "support_note", "applied_conclusion", "propositions", "guarantor_rows"):
+            add(subanswer.get(key))
+    return "\n".join(parts)
+
+
+def _fact_tokens(text: str) -> list[str]:
+    normalized = text.casefold()
+    normalized = re.sub(
+        r"(\d+(?:,\d{3})*(?:\.\d+)?)\s*%",
+        lambda match: f"{match.group(1).replace(',', '')} percent",
+        normalized,
+    )
+    normalized = normalized.replace("$", "").replace(",", "")
+    normalized = re.sub(r"\bguarantee(?:s|d)?\b", "guaranty", normalized)
+    normalized = re.sub(r"\bguarant(?:y|ies)\b", "guaranty", normalized)
+    return re.findall(r"[a-z]+|\d+(?:\.\d+)?", normalized)
+
+
+_FACT_STOP_WORDS = {"a", "an", "and", "for", "in", "of", "the", "to", "with"}
+
+
+def expected_fact_is_present(expected: str, answer_text: str) -> bool:
+    """Match expected fact terms within a sentence-sized answer window."""
+    required = [
+        token for token in _fact_tokens(expected) if token not in _FACT_STOP_WORDS
+    ]
+    if not required:
+        return True
+    sentences = re.split(r"[\n.!?;]+", answer_text)
+    window_size = max(8, len(required) * 3)
+    for sentence in sentences:
+        tokens = _fact_tokens(sentence)
+        for start in range(len(tokens)):
+            window = set(tokens[start : start + window_size])
+            if all(token in window for token in required):
+                return True
+    return False
+
+
+def fetch_healthz(base_url: str) -> tuple[dict | None, str | None]:
+    request = Request(
+        f"{base_url.rstrip('/')}/api/healthz",
+        headers={"Accept": "application/json"},
+    )
+    try:
+        with urlopen(request, timeout=20) as response:
+            return json.load(response), None
+    except HTTPError as exc:
+        return None, f"HTTP {exc.code} {exc.reason}"
+    except (URLError, OSError, TimeoutError) as exc:
+        return None, str(exc)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument(
@@ -175,6 +260,10 @@ def main() -> int:
         help="Write a JSON case-by-case report to this path.",
     )
     parser.add_argument(
+        "--expected-source-sha256",
+        help="Fail if /api/healthz does not report this exact corpus hash.",
+    )
+    parser.add_argument(
         "--delay-seconds",
         type=float,
         default=0,
@@ -182,6 +271,14 @@ def main() -> int:
     )
     args = parser.parse_args()
     cases = json.loads(args.cases.read_text())
+    health, health_error = fetch_healthz(args.base_url)
+    corpus_hash_failure = bool(
+        args.expected_source_sha256
+        and (
+            not health
+            or health.get("source_sha256") != args.expected_source_sha256
+        )
+    )
 
     phantom_citations = 0
     unsupported_failures = 0
@@ -196,15 +293,42 @@ def main() -> int:
     applicability_failures = 0
     guarantor_row_failures = 0
     baseline_failures = 0
+    expected_fact_failures = 0
     case_results: list[dict[str, object]] = []
 
     for case in cases:
         try:
             result = query(args.base_url, case["question"], args.cookie)
         except HTTPError as exc:
-            body = exc.read().decode("utf-8", errors="replace")
-            print(f"ERROR {case['id']}: HTTP {exc.code}: {body}", file=sys.stderr)
-            return 2
+            error = f"HTTP {exc.code} {exc.reason}"
+            print(f"ERROR {case['id']}: {error}", file=sys.stderr)
+            case_results.append(
+                {"id": case["id"], "status": "ERROR", "error": error}
+            )
+            for remaining in cases[len(case_results) :]:
+                case_results.append(
+                    {
+                        "id": remaining["id"],
+                        "status": "NOT_RUN",
+                        "reason": "Stopped after the first request error.",
+                    }
+                )
+            break
+        except (URLError, OSError, TimeoutError) as exc:
+            error = str(exc)
+            print(f"ERROR {case['id']}: {error}", file=sys.stderr)
+            case_results.append(
+                {"id": case["id"], "status": "ERROR", "error": error}
+            )
+            for remaining in cases[len(case_results) :]:
+                case_results.append(
+                    {
+                        "id": remaining["id"],
+                        "status": "NOT_RUN",
+                        "reason": "Stopped after the first request error.",
+                    }
+                )
+            break
         sources = result.get("sources", [])
         supported_propositions = []
         for subanswer in result.get("subanswers", []):
@@ -344,6 +468,14 @@ def main() -> int:
             else []
         )
         baseline_failure = bool(baseline_failure_details)
+        missing_expected_facts = [
+            fact
+            for fact in case.get("expected_facts", [])
+            if not expected_fact_is_present(
+                fact, _visible_answer_text(result)
+            )
+        ]
+        expected_fact_failure = bool(missing_expected_facts)
 
         phantom_citations += int(phantom)
         citation_failures += int(citation_failure)
@@ -360,6 +492,7 @@ def main() -> int:
             row_failure or forbidden_row_failure or unresolved_failure
         )
         baseline_failures += int(baseline_failure)
+        expected_fact_failures += int(expected_fact_failure)
         status = "PASS" if not any(
             (
                 phantom,
@@ -378,6 +511,7 @@ def main() -> int:
                 forbidden_row_failure,
                 unresolved_failure,
                 baseline_failure,
+                expected_fact_failure,
             )
         ) else "FAIL"
         print(
@@ -389,7 +523,8 @@ def main() -> int:
             f"trigger_note={trigger_note_failure} "
             f"negative_audit={negative_audit_failure or forbidden_section_failure} "
             f"date_warning={date_warning_failure} applicability={applicability_failure} "
-            f"guarantor_rows={row_failure or forbidden_row_failure or unresolved_failure}"
+            f"guarantor_rows={row_failure or forbidden_row_failure or unresolved_failure} "
+            f"expected_facts={missing_expected_facts or 'ok'}"
             + (
                 f" baseline={'; '.join(baseline_failure_details)}"
                 if baseline_failure
@@ -417,6 +552,8 @@ def main() -> int:
                     row_failure or forbidden_row_failure or unresolved_failure
                 ),
                 "baseline_failure": baseline_failure,
+                "expected_fact_failure": expected_fact_failure,
+                "missing_expected_facts": missing_expected_facts,
             }
         )
         if args.delay_seconds > 0 and case is not cases[-1]:
@@ -425,8 +562,12 @@ def main() -> int:
     summary = {
         "cases": len(cases),
         "passed": sum(item["status"] == "PASS" for item in case_results),
-        "failed": sum(item["status"] == "FAIL" for item in case_results),
-        "phantom_citation_rate": phantom_citations / len(cases),
+        "failed": sum(item["status"] != "PASS" for item in case_results)
+        + int(corpus_hash_failure),
+        "not_run": sum(item["status"] == "NOT_RUN" for item in case_results),
+        "request_errors": sum(item["status"] == "ERROR" for item in case_results),
+        "corpus_hash_failure": corpus_hash_failure,
+        "phantom_citation_rate": phantom_citations / max(1, len(cases)),
         "citation_failures": citation_failures,
         "support_signal_failures": support_signal_failures,
         "section_failures": section_failures,
@@ -439,11 +580,16 @@ def main() -> int:
         "applicability_failures": applicability_failures,
         "guarantor_row_failures": guarantor_row_failures,
         "baseline_failures": baseline_failures,
+        "expected_fact_failures": expected_fact_failures,
     }
     report = {
         "target": args.base_url,
         "suite": str(args.cases),
         "recorded_at_utc": dt.datetime.now(dt.timezone.utc).isoformat(),
+        "authenticated_requests": bool(args.cookie),
+        "expected_source_sha256": args.expected_source_sha256,
+        "corpus": health,
+        "health_error": health_error,
         "summary": summary,
         "cases": case_results,
     }
@@ -452,7 +598,7 @@ def main() -> int:
         args.report.parent.mkdir(parents=True, exist_ok=True)
         args.report.write_text(json.dumps(report, indent=2) + "\n")
         print(f"Report written to {args.report}")
-    return int(summary["failed"] > 0)
+    return int(summary["failed"] > 0 or corpus_hash_failure)
 
 
 if __name__ == "__main__":

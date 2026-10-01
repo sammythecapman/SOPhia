@@ -17,13 +17,13 @@ from openai import OpenAI
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "artifacts" / "api-server"))
 from applicability import APPLICABILITY_DIMENSIONS, classify_text  # noqa: E402
 from db import connection  # noqa: E402
+from source_metadata import DEFAULT_SOURCE_URL  # noqa: E402
 
 MODEL = "text-embedding-3-small"
 MAX_CHARS = 6000
 BATCH_SIZE = 64
 STRUCTURAL_HEADING_RE = re.compile(r"^heading [1-6]$")
 DEFAULT_EFFECTIVE_DATE = "2026-10-01"
-DEFAULT_SOURCE_URL = "https://www.sba.gov/document/sop-50-10-8-1"
 
 
 def find_docx(explicit: str | None) -> Path:
@@ -112,8 +112,9 @@ def split_text(text: str) -> list[str]:
     return chunks
 
 
-def extract_chunks(path: Path) -> list[dict[str, str]]:
-    document = Document(path)
+def extract_chunks(path: Path, document=None) -> list[dict[str, str]]:
+    if document is None:
+        document = Document(path)
     _, _, toc_pages = extract_source_metadata(document)
     heading_stack: list[str] = []
     body: list[str] = []
@@ -161,13 +162,43 @@ def extract_chunks(path: Path) -> list[dict[str, str]]:
     return output
 
 
+def _embedding_error_codes(error: Exception) -> set[str]:
+    codes = set()
+    direct_code = getattr(error, "code", None)
+    if isinstance(direct_code, str):
+        codes.add(direct_code.casefold())
+    body = getattr(error, "body", None)
+    if isinstance(body, dict):
+        details = body.get("error", body)
+        if isinstance(details, dict):
+            for key in ("code", "type"):
+                value = details.get(key)
+                if isinstance(value, str):
+                    codes.add(value.casefold())
+    return codes
+
+
+def _is_retryable_embedding_error(error: Exception) -> bool:
+    codes = _embedding_error_codes(error)
+    if codes.intersection({"insufficient_quota", "credit_balance_exhausted"}):
+        return False
+
+    status = getattr(error, "status_code", None)
+    if status in {408, 409, 429} or (isinstance(status, int) and status >= 500):
+        return True
+    return isinstance(error, (TimeoutError, ConnectionError)) or type(error).__name__ in {
+        "APIConnectionError",
+        "APITimeoutError",
+    }
+
+
 def embed_with_retry(client: OpenAI, texts: list[str]) -> list[list[float]]:
     for attempt in range(6):
         try:
             response = client.embeddings.create(model=MODEL, input=texts)
             return [item.embedding for item in response.data]
-        except Exception:
-            if attempt == 5:
+        except Exception as exc:
+            if attempt == 5 or not _is_retryable_embedding_error(exc):
                 raise
             delay = min(30, (2**attempt) + random.random())
             print(f"Embedding request failed; retrying in {delay:.1f}s...")
@@ -252,16 +283,40 @@ def ingest(
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("path", nargs="?")
-    parser.add_argument("--version", default="SOP 50 10 8.1")
-    parser.add_argument("--effective-date", default=DEFAULT_EFFECTIVE_DATE)
+    parser.add_argument("--version")
+    parser.add_argument("--effective-date")
     parser.add_argument("--source-url", default=os.getenv("SOP_SOURCE_URL", DEFAULT_SOURCE_URL))
     parser.add_argument("--preview-count", type=int, default=8)
     parser.add_argument("--ingest", action="store_true", help="Enable approval prompt and ingestion")
     args = parser.parse_args()
     path = find_docx(args.path)
-    chunks = extract_chunks(path)
+    document = Document(path)
+    document_version, document_effective_date, _ = extract_source_metadata(document)
+    if args.version and document_version and args.version != document_version:
+        parser.error(
+            f"--version {args.version!r} conflicts with document version "
+            f"{document_version!r}."
+        )
+    if (
+        args.effective_date
+        and document_effective_date
+        and args.effective_date != document_effective_date
+    ):
+        parser.error(
+            f"--effective-date {args.effective_date!r} conflicts with document "
+            f"effective date {document_effective_date!r}."
+        )
+    version = args.version or document_version
+    effective_date = args.effective_date or document_effective_date
+    if not version or not effective_date:
+        parser.error(
+            "The document must identify its SOP version and effective date, or both "
+            "must be supplied explicitly."
+        )
+    chunks = extract_chunks(path, document)
     sha256 = hashlib.sha256(path.read_bytes()).hexdigest()
     print(f"Document: {path} ({len(chunks)} chunks, SHA-256 {sha256})")
+    print(f"Source metadata: {version}, effective {effective_date}")
     for index, chunk in enumerate(chunks[: args.preview_count], 1):
         preview = chunk["chunk_text"][:350].replace("\n", " ")
         print(f"\n[{index}] {chunk['section_ref']}\n{preview}")
@@ -270,12 +325,12 @@ def main() -> None:
         print("Review the chunks, then rerun with --ingest to receive an approval prompt.")
         return
     confirmation = input(
-        f'\nType exactly "INGEST {args.version}" to embed and upsert all {len(chunks)} chunks: '
+        f'\nType exactly "INGEST {version}" to embed and upsert all {len(chunks)} chunks: '
     )
-    if confirmation != f"INGEST {args.version}":
+    if confirmation != f"INGEST {version}":
         print("Approval not received. No embeddings requested and no rows written.")
         return
-    ingest(chunks, args.version, args.effective_date, args.source_url, sha256)
+    ingest(chunks, version, effective_date, args.source_url, sha256)
 
 
 if __name__ == "__main__":

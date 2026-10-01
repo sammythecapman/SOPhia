@@ -29,9 +29,16 @@
   },
   {
     "id": "trust-guaranty",
-    "question": "If a trust provides the guaranty on an SBA loan, what additional requirements apply?",
+    "question": "A 7(a) applicant is owned by two revocable trusts, one at 12% and one at 8%. Under SOP 50 10 8.1 with Technical Policy Updates, do the trusts' ownership percentages aggregate for guaranty purposes, and who must sign?",
     "expected_sections": ["Guaranties"],
-    "expected_facts": ["trust", "guaranty"],
+    "expected_facts": ["12%", "8%", "20%", "each trust", "trustee", "Trustor"],
+    "unsupported": false
+  },
+  {
+    "id": "trust-aggregate-below-threshold",
+    "question": "A 7(a) applicant is owned by one trust at 19% and an individual at 81%. Does the trust have to guarantee the loan under the trust ownership threshold?",
+    "expected_sections": ["Guaranties"],
+    "expected_facts": ["19%", "20%", "not required", "81%"],
     "unsupported": false
   },
   {

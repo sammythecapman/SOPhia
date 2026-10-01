@@ -1,10 +1,53 @@
+import os
 import sys
 import unittest
+from contextlib import contextmanager
 from pathlib import Path
 
 
 API_SERVER = Path(__file__).resolve().parents[1] / "artifacts" / "api-server"
 sys.path.insert(0, str(API_SERVER))
+
+# Importing app.py validates corpus metadata at startup. Keep these unit tests
+# independent of Replit secrets and databases by supplying a small in-memory DB.
+os.environ.setdefault("DATABASE_URL", "postgresql://unit-test.invalid/sop")
+os.environ.setdefault("OPENAI_API_KEY", "unit-test-placeholder")
+os.environ.setdefault("SESSION_SECRET", "unit-test-session-secret")
+
+import db  # noqa: E402
+
+
+class _StartupCursor:
+    def __init__(self, row):
+        self.row = row
+
+    def fetchone(self):
+        return self.row
+
+
+class _StartupConnection:
+    def execute(self, statement, parameters=()):
+        if "FROM corpus_metadata" in statement:
+            return _StartupCursor(
+                (
+                    "SOP 50 10 8.1",
+                    "https://www.sba.gov/document/sop-50-10-lender-development-company-loan-programs",
+                    "unit-test-sha256",
+                    "2026-10-01",
+                    1,
+                )
+            )
+        if "SELECT COUNT(*)" in statement:
+            return _StartupCursor((1,))
+        raise AssertionError(f"Unexpected startup SQL: {statement}")
+
+
+@contextmanager
+def _startup_connection():
+    yield _StartupConnection()
+
+
+db.connection = _startup_connection
 
 from applicability import applicability_check, classify_text  # noqa: E402
 from app import (  # noqa: E402

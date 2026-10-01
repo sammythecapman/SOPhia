@@ -12,6 +12,7 @@ A grounded question-answering tool for SBA SOP 50 10 8.
 - `pnpm --filter @workspace/db run push` — push DB schema changes (dev only)
 - Required env: `DATABASE_URL`, `OPENAI_API_KEY`, and `SESSION_SECRET`
 - Production auth also requires `REPL_ID`; local development bypasses auth unless `NODE_ENV=production`
+- Production queries require `SOP_ALLOWED_EMAILS`, a comma-separated allowlist of verified account emails; missing or empty configuration denies access
 
 ## Stack
 
@@ -30,7 +31,7 @@ A grounded question-answering tool for SBA SOP 50 10 8.
 - `migrations/006_add_corpus_metadata.sql` — edition-bound corpus metadata and SHA-256
 - `migrations/007_add_api_rate_limits.sql` — shared fixed-window rate-limit counters
 - `scripts/ingest_sop.py` — guarded DOCX ingestion
-- `scripts/run_sop_regression.py` — 28-case grounded-answer regression runner
+- `scripts/run_sop_regression.py` — grounded-answer regression runner with expected-fact and corpus-hash checks
 
 ## Architecture decisions
 

@@ -20,6 +20,7 @@ from applicability import (
 )
 from auth import configure_auth, current_user, require_auth
 from db import connection
+from source_metadata import canonicalize_source_url
 
 app = Flask(__name__)
 configure_auth(app)
@@ -1763,7 +1764,7 @@ def load_corpus_metadata() -> dict[str, Any]:
         )
     return {
         "edition": row[0],
-        "source_url": row[1],
+        "source_url": canonicalize_source_url(row[1]),
         "sha256": row[2],
         "effective_date": (
             row[3].isoformat() if hasattr(row[3], "isoformat") else str(row[3])

@@ -16,6 +16,7 @@ from flask import Flask, jsonify, redirect, request, session, url_for
 SESSION_COOKIE = "sophia_session"
 PKCE_COOKIE = "sophia_pkce_verifier"
 SESSION_TTL_SECONDS = 7 * 24 * 60 * 60
+ALLOWLIST_ENV = "SOP_ALLOWED_EMAILS"
 ISSUER_URL = os.getenv("ISSUER_URL", "https://replit.com/oidc").rstrip("/")
 
 
@@ -50,6 +51,29 @@ def auth_bypass_enabled() -> bool:
     return os.getenv("ALLOW_DEV_AUTH_BYPASS", default).casefold() == "true" and not _is_production()
 
 
+def is_authorized_user(user: Any) -> bool:
+    """Require a verified, exact email allowlist match in production."""
+    if not isinstance(user, dict):
+        return False
+    if not _is_production():
+        return True
+
+    email = user.get("email")
+    verified = user.get("email_verified") is True or (
+        isinstance(user.get("email_verified"), str)
+        and user["email_verified"].casefold() == "true"
+    )
+    if not isinstance(email, str) or not email.strip() or not verified:
+        return False
+
+    allowed_emails = {
+        value.strip().casefold()
+        for value in os.getenv(ALLOWLIST_ENV, "").split(",")
+        if value.strip()
+    }
+    return email.strip().casefold() in allowed_emails
+
+
 def configure_auth(app: Flask) -> OAuth:
     session_secret = os.getenv("SESSION_SECRET")
     if not session_secret:
@@ -78,7 +102,7 @@ def configure_auth(app: Flask) -> OAuth:
     @app.get("/api/auth/user")
     def auth_user():
         user = session.get("user")
-        return jsonify({"user": user if isinstance(user, dict) else None})
+        return jsonify({"user": user if is_authorized_user(user) else None})
 
     @app.get("/api/login")
     def login():
@@ -105,10 +129,14 @@ def configure_auth(app: Flask) -> OAuth:
             userinfo = token.get("userinfo")
             if not isinstance(userinfo, dict) or not userinfo.get("sub"):
                 raise RuntimeError("OIDC response did not include a subject.")
-            session.clear()
-            session["user"] = {
+            user = {
                 "id": str(userinfo["sub"]),
                 "email": userinfo.get("email"),
+                "email_verified": userinfo.get("email_verified") is True
+                or (
+                    isinstance(userinfo.get("email_verified"), str)
+                    and userinfo["email_verified"].casefold() == "true"
+                ),
                 "name": userinfo.get("name")
                 or " ".join(
                     part
@@ -116,6 +144,11 @@ def configure_auth(app: Flask) -> OAuth:
                     if part
                 ),
             }
+            if not is_authorized_user(user):
+                session.clear()
+                return jsonify({"error": "This account is not authorized."}), 403
+            session.clear()
+            session["user"] = user
             session.permanent = True
             return redirect(return_to)
         except Exception:
@@ -139,8 +172,13 @@ def current_user() -> dict[str, Any] | None:
 def require_auth(handler: Callable[..., Any]) -> Callable[..., Any]:
     @wraps(handler)
     def wrapped(*args: Any, **kwargs: Any):
-        if auth_bypass_enabled() or current_user() is not None:
+        if auth_bypass_enabled():
             return handler(*args, **kwargs)
-        return jsonify({"error": "Authentication required.", "login_url": "/api/login"}), 401
+        user = current_user()
+        if user is None:
+            return jsonify({"error": "Authentication required.", "login_url": "/api/login"}), 401
+        if not is_authorized_user(user):
+            return jsonify({"error": "This account is not authorized."}), 403
+        return handler(*args, **kwargs)
 
     return wrapped
