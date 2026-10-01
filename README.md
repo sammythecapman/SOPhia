@@ -1,6 +1,6 @@
 # sop-query-tool
 
-A standalone retrieval-augmented question-answering app for SBA SOP 50 10 8.
+A standalone retrieval-augmented question-answering app for SBA SOP 50 10 8.1.
 It uses a React frontend, Flask API, Replit PostgreSQL with pgvector, and OpenAI
 embeddings/chat completions for context-constrained answers.
 
