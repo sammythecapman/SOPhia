@@ -1,0 +1,3 @@
+1. Publish c6a6588, then run ingest_sop.py on the Sept 25 technical-update DOCX against the prod DB. Confirm it reports stale chunks removed and healthz reads 0fb0c469. Until then prod answers trust questions with the old rule.
+
+2. Immediately after: run the regression on prod signed in, and hand-check one trust-aggregation answer. Then confirm the allowlist 403s with a second Replit account.
