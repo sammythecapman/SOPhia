@@ -31,9 +31,29 @@ class RegressionOptionTests(unittest.TestCase):
                         "source_chunk": "Do not copy full source chunks into the report.",
                     }
                 ],
+                "subanswers": [
+                    {
+                        "guarantor_rows": [
+                            {
+                                "party": "Trust A",
+                                "ownership_percentage": 12,
+                                "ownership_comparison": (
+                                    "Aggregate ownership across 2 trusts is 20 percent."
+                                ),
+                                "status": "required",
+                                "citations": [{"source_id": "sop-93"}],
+                            }
+                        ]
+                    }
+                ],
             }
         )
         self.assertIn("20 percent", details["sample_answer"])
+        self.assertEqual(details["guarantor_rows"][0]["party"], "Trust A")
+        self.assertEqual(
+            details["guarantor_rows"][0]["ownership_percentage"],
+            12,
+        )
         self.assertEqual(details["source_citations"][0]["page_number"], 93)
         self.assertNotIn("source_chunk", details["source_citations"][0])
 

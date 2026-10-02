@@ -337,10 +337,16 @@ function GuarantorTable({
                   className={
                     row.status === "required"
                       ? "border-emerald-700/30 bg-emerald-50 text-[10px] font-semibold uppercase tracking-wider text-emerald-800"
-                      : "border-amber-300 bg-amber-50 text-[10px] font-semibold uppercase tracking-wider text-amber-800"
+                      : row.status === "not_required"
+                        ? "border-sky-300 bg-sky-50 text-[10px] font-semibold uppercase tracking-wider text-sky-800"
+                        : "border-amber-300 bg-amber-50 text-[10px] font-semibold uppercase tracking-wider text-amber-800"
                   }
                 >
-                  {row.status === "required" ? "Required" : "Unresolved"}
+                  {row.status === "required"
+                    ? "Required"
+                    : row.status === "not_required"
+                      ? "Not required"
+                      : "Unresolved"}
                 </Badge>
                 <div className="mt-3 space-y-2">
                   {row.citations.map((source, citationIndex) => {

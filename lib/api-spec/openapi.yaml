@@ -191,7 +191,7 @@ components:
           type: string
         status:
           type: string
-          enum: [required, unresolved]
+          enum: [required, not_required, unresolved]
         citations:
           type: array
           items:

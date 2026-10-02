@@ -8,3 +8,9 @@ SOP chunks must carry structured transaction, entity, party-role, program-scope,
 **Why:** Similarity retrieval surfaced ESOP and partial-change provisions for ordinary 7(a) transactions, and textual entailment alone accepted them because the quoted rule was paraphrased correctly despite its trigger not matching the facts.
 
 **How to apply:** Treat empty tags as universal for every dimension. For indexed chunks, derive transaction/product/size scope from the nearest heading, with Appendix 15's explicit change-of-ownership default as the exception. Evaluate internal numeric/entity conditions in code after tag filtering, fail open when facts are silent or a condition cannot be parsed, and keep not-applicable evidence visibly distinct from unsupported and supported evidence.
+
+For compound questions, keep retrieval seeds scoped to each discrete issue while preserving the complete user-supplied facts for applicability checks. Apply issue-relevance checks to every renderable claim, including propositions used as a fallback answer.
+
+**Why:** Mixed guaranty and seller-note questions allowed unrelated underwriting language into the seller-note issue, and a fallback proposition could bypass the conclusion-only relevance check.
+
+**How to apply:** Derive and audit each source issue against its requested sub-question before rendering claims; do not let vocabulary from a separate issue make adjacent evidence appear responsive.

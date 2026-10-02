@@ -49,12 +49,21 @@ def _startup_connection():
 
 db.connection = _startup_connection
 
-from applicability import applicability_check, classify_text  # noqa: E402
+from applicability import (  # noqa: E402
+    applicability_dimension_conflicts,
+    applicability_check,
+    classify_question,
+    classify_text,
+)
 from app import (  # noqa: E402
     RetrievedSource,
+    GUARANTY_RETRIEVAL_QUERY,
+    SELLER_NOTE_RETRIEVAL_QUERY,
+    SELLER_NOTE_TOPIC_RE,
     augment_extracted_party_capacities,
     build_lexical_search_query,
     build_retrieval_searches,
+    ensure_seller_note_subquestion,
     candidate_admitted,
     conclusion_has_cited_issue_focus,
     condition_trigger_is_established,
@@ -81,6 +90,122 @@ def empty_facts():
 
 
 class ApplicabilityRegressionTests(unittest.TestCase):
+    def test_broad_change_of_ownership_provision_applies_to_partial_change(self):
+        source = classify_text(
+            "Seller debt may be considered as equity when it is on full standby.",
+            "Appendices > Appendix 15: 7(a) Changes of Ownership > "
+            "Change of Ownership Requirements > Equity Requirements",
+        )
+        facts = classify_question(
+            "A 7(a) partial change of ownership uses seller financing."
+        )
+
+        applicable, reason = applicability_check(source, facts)
+
+        self.assertTrue(applicable)
+        self.assertIsNone(reason)
+
+    def test_partial_change_provision_does_not_apply_to_explicit_full_change(self):
+        source = classify_text(
+            "The partial change has additional guaranty requirements.",
+            "Appendices > Appendix 15: 7(a) Changes of Ownership > "
+            "Partial Changes of Ownership > Guaranties",
+        )
+        facts = classify_question("A 7(a) full change of ownership.")
+
+        applicable, reason = applicability_check(source, facts)
+
+        self.assertFalse(applicable)
+        self.assertIn("full change-of-ownership transactions", reason or "")
+
+    def test_seller_note_issue_is_split_from_guaranty_question(self):
+        question = (
+            "An ordinary 7(a) full change of ownership is funded with a seller note. "
+            "The seller exits and retains no ownership. Which guaranty and seller-note "
+            "rules apply?"
+        )
+        mixed_plan = [
+            {
+                "question": "Which guaranty and seller-note rules apply?",
+                "material_facts": [
+                    "The seller exits and retains no ownership.",
+                    "The transaction is funded with a seller note.",
+                ],
+                "search_terms": [
+                    SELLER_NOTE_RETRIEVAL_QUERY,
+                    "post-sale ownership",
+                ],
+            }
+        ]
+
+        split = ensure_seller_note_subquestion(question, mixed_plan)
+
+        self.assertEqual(len(split), 2)
+        self.assertTrue(has_guaranty_intent(split[0]["question"]))
+        self.assertFalse(SELLER_NOTE_TOPIC_RE.search(split[0]["question"]))
+        self.assertNotIn(
+            SELLER_NOTE_RETRIEVAL_QUERY,
+            split[0]["search_terms"],
+        )
+        self.assertIn(
+            GUARANTY_RETRIEVAL_QUERY,
+            split[0]["search_terms"],
+        )
+        self.assertIn("seller-note", split[1]["question"])
+        self.assertIn(SELLER_NOTE_RETRIEVAL_QUERY, split[1]["search_terms"])
+
+        plan = [
+            {
+                "question": "Which guaranty rules apply after the seller exits?",
+                "material_facts": [],
+                "search_terms": [],
+            }
+        ]
+
+        completed = ensure_seller_note_subquestion(question, plan)
+
+        self.assertEqual(len(completed), 2)
+        self.assertIn("seller-note", completed[1]["question"])
+        self.assertIn("seller note", completed[1]["material_facts"][0].casefold())
+        self.assertIn(
+            SELLER_NOTE_RETRIEVAL_QUERY,
+            completed[1]["search_terms"],
+        )
+
+        existing_note_plan = [
+            {"question": "What seller-note rules apply?", "search_terms": []}
+        ]
+        retained = ensure_seller_note_subquestion(question, existing_note_plan)
+        self.assertEqual(len(retained), 1)
+        self.assertIn(
+            SELLER_NOTE_RETRIEVAL_QUERY,
+            retained[0]["search_terms"],
+        )
+
+    def test_nonexclusive_guarantor_and_owner_roles_do_not_conflict(self):
+        self.assertFalse(
+            applicability_dimension_conflicts(
+                "party_roles",
+                {"guarantor"},
+                {"selling_owner_under_20"},
+            )
+        )
+
+    def test_explicit_retained_and_exiting_seller_roles_conflict(self):
+        source = {
+            **empty_facts(),
+            "party_roles": ["seller_retaining_ownership"],
+        }
+        facts = {
+            **empty_facts(),
+            "party_roles": ["exiting_seller"],
+        }
+
+        applicable, reason = applicability_check(source, facts)
+
+        self.assertFalse(applicable)
+        self.assertIn("party roles mismatch", reason or "")
+
     def test_retrieval_keeps_material_facts_as_separate_searches(self):
         fact = "The borrower leases premises month-to-month."
         searches = build_retrieval_searches(
@@ -243,6 +368,29 @@ class ApplicabilityRegressionTests(unittest.TestCase):
                     )
                 )
 
+    def test_seller_note_claim_requires_seller_note_citation(self):
+        self.assertFalse(
+            conclusion_has_cited_issue_focus(
+                "What is the market rate for a seller note?",
+                "The maximum allowable fixed interest rate is the Prime rate.",
+                "The maximum allowable fixed interest rate will be the Prime rate.",
+            )
+        )
+        self.assertTrue(
+            conclusion_has_cited_issue_focus(
+                "What seller-note requirements apply?",
+                "Seller debt may be considered as equity if subordinated and on full standby.",
+                "Seller debt that is subordinated to the Lender and on full standby may be considered as equity.",
+            )
+        )
+        self.assertFalse(
+            conclusion_has_cited_issue_focus(
+                "What is the market rate for a seller note?",
+                "Seller financing and standby agreements must be addressed.",
+                "Seller financing; Stand-by agreements.",
+            )
+        )
+
     def test_unstated_split_trigger_blocks_unqualified_claims(self):
         section = "Section A > Occupancy and Leasing Requirements"
         previous = RetrievedSource(
@@ -391,6 +539,59 @@ class ApplicabilityRegressionTests(unittest.TestCase):
 
         self.assertFalse(applicable)
         self.assertIn("Standard 7(a)", reason or "")
+
+    def test_esop_scope_does_not_apply_to_robs_facts(self):
+        esop_source = classify_text(
+            "If an ESOP seller remains a partial owner, the seller must provide a guaranty.",
+            "Section A > Chapter 2 > Loans to Employee Stock Ownership Plans (ESOPs)",
+        )
+        robs_facts = classify_question("A 7(a) applicant uses a ROBS plan.")
+
+        self.assertIn("esop", esop_source["transaction_types"])
+        self.assertIn("robs", robs_facts["transaction_types"])
+        applicable, reason = applicability_check(esop_source, robs_facts)
+
+        self.assertFalse(applicable)
+        self.assertIn("transaction mismatch", reason or "")
+
+    def test_robs_scope_applies_to_robs_facts(self):
+        robs_source = classify_text(
+            "A business owned by a 401(k) plan, including a ROBS plan, may be eligible.",
+            "Section A > 401(k) Plans Including Rollovers as Business Start-ups (ROBS) Plans",
+        )
+        robs_facts = classify_question("A 7(a) applicant uses a ROBS plan.")
+
+        self.assertIn("robs", robs_source["transaction_types"])
+        applicable, reason = applicability_check(robs_source, robs_facts)
+
+        self.assertTrue(applicable)
+        self.assertIsNone(reason)
+
+    def test_retirement_plan_without_robs_does_not_get_robs_scope(self):
+        facts = classify_question("A retirement plan owns part of the business.")
+
+        self.assertNotIn("robs", facts["transaction_types"])
+
+    def test_retirement_trust_has_trust_and_retirement_plan_scopes(self):
+        facts = classify_question(
+            "A retirement trust owns 60% of the Applicant through a ROBS structure. "
+            "Who must sign the full unconditional guaranty?"
+        )
+        robs_source = classify_text(
+            "The plan sponsor, plan participant, and trustee have duties under this "
+            "ROBS structure.",
+            "Section A > Chapter 2 > "
+            "401(k) Plans Including Rollovers as Business Start-ups (ROBS) Plans",
+        )
+
+        self.assertIn("trust", facts["entity_structures"])
+        self.assertIn("retirement_plan", facts["entity_structures"])
+        self.assertIn("robs", facts["transaction_types"])
+        self.assertNotIn("guarantor", facts["party_roles"])
+        self.assertIn("trustee", robs_source["party_roles"])
+        applicable, reason = applicability_check(robs_source, facts)
+        self.assertTrue(applicable)
+        self.assertIsNone(reason)
 
     def test_universal_core_section_has_no_narrow_product_gate(self):
         tags = classify_text(
@@ -554,6 +755,115 @@ class ApplicabilityRegressionTests(unittest.TestCase):
             },
         )
 
+    def test_aggregate_ownership_threshold_applies_to_the_source_defined_group(self):
+        parties = [
+            {
+                "party": "Trust A",
+                "party_type": "entity",
+                "ownership_percentage": 12,
+                "capacities": [{"name": "entity owner", "evidence": "owns a share"}],
+            },
+            {
+                "party": "Trust B",
+                "party_type": "entity",
+                "ownership_percentage": 8,
+                "capacities": [{"name": "entity owner", "evidence": "owns a share"}],
+            },
+        ]
+        provisions = [
+            {
+                "source_id": 40,
+                "quote": (
+                    "When one or more trusts (revocable or irrevocable) own, in the "
+                    "aggregate, 20% or more of the Applicant, each trust must provide "
+                    "an unlimited full guaranty."
+                ),
+                "subject_terms": ["trusts"],
+                "capacity_terms": [],
+                "applies_to_all": False,
+                "obligation_text": (
+                    "Each trust must provide an unlimited full guaranty."
+                ),
+                "guaranty_type": "unlimited full",
+                "conditions": "Ownership is measured in the aggregate.",
+            }
+        ]
+
+        rows = enumerate_guarantor_rows_from_inputs(parties, provisions)
+
+        self.assertEqual(len(rows), 2)
+        self.assertTrue(all(row["status"] == "required" for row in rows))
+        self.assertTrue(
+            all("aggregate ownership across 2 trusts is 20 percent" in row["ownership_comparison"]
+                for row in rows)
+        )
+        self.assertTrue(
+            all(row["citations"][0]["source_id"] == 40 for row in rows)
+        )
+
+    def test_aggregate_threshold_below_cutoff_is_not_required(self):
+        parties = [
+            {
+                "party": "Trust A",
+                "party_type": "entity",
+                "ownership_percentage": 19,
+                "capacities": [{"name": "entity owner", "evidence": "owns a share"}],
+            },
+            {
+                "party": "individual owner",
+                "party_type": "individual",
+                "ownership_percentage": 81,
+                "capacities": [{"name": "direct owner", "evidence": "owns directly"}],
+            },
+        ]
+        provisions = [
+            {
+                "source_id": 41,
+                "quote": (
+                    "When one or more trusts (revocable or irrevocable) own, in the "
+                    "aggregate, 20% or more of the Applicant, each trust must provide "
+                    "an unlimited full guaranty."
+                ),
+                "subject_terms": ["trusts"],
+                "capacity_terms": [],
+                "applies_to_all": False,
+                "obligation_text": (
+                    "Each trust must provide an unlimited full guaranty."
+                ),
+                "guaranty_type": "unlimited full",
+                "conditions": "Ownership is measured in the aggregate.",
+            },
+            {
+                "source_id": 42,
+                "quote": (
+                    "An individual owner with 20% or more of the Applicant must "
+                    "provide an unlimited full guaranty."
+                ),
+                "subject_terms": ["individual"],
+                "capacity_terms": ["owner"],
+                "applies_to_all": False,
+                "obligation_text": (
+                    "An individual owner with 20% or more of the Applicant must "
+                    "provide an unlimited full guaranty."
+                ),
+                "guaranty_type": "unlimited full",
+                "conditions": "",
+            },
+        ]
+
+        rows = enumerate_guarantor_rows_from_inputs(parties, provisions)
+        trust_row = next(row for row in rows if row["party"] == "Trust A")
+        individual_row = next(
+            row for row in rows if row["party"] == "individual owner"
+        )
+
+        self.assertEqual(trust_row["status"], "not_required")
+        self.assertIn("19 percent", trust_row["ownership_comparison"])
+        self.assertIn("20% or more", trust_row["ownership_comparison"])
+        self.assertIn("individual owner at 81 percent", trust_row["ownership_comparison"])
+        self.assertIn("not included in the group total", trust_row["ownership_comparison"])
+        self.assertEqual(individual_row["status"], "required")
+
     def test_relevance_is_required_for_candidate_admission(self):
         self.assertFalse(
             candidate_admitted(
@@ -583,6 +893,31 @@ class ApplicabilityRegressionTests(unittest.TestCase):
             [capacity["name"] for capacity in augmented[0]["capacities"]],
             ["Trustee", "direct owner"],
         )
+
+    def test_owner_percentage_at_phrase_adds_omitted_party(self):
+        parties = [
+            {
+                "party": "Trust",
+                "ownership_percentage": 19,
+                "capacities": [{"name": "entity owner", "evidence": "trust owner"}],
+            },
+            {
+                "party": "Applicant",
+                "ownership_percentage": None,
+                "capacities": [{"name": "co-borrower", "evidence": "borrower"}],
+            },
+        ]
+
+        augmented = augment_extracted_party_capacities(
+            "A 7(a) applicant is owned by one trust at 19% and an individual at 81%.",
+            parties,
+        )
+
+        individual = next(
+            party for party in augmented if party["party"].casefold() == "individual"
+        )
+        self.assertEqual(individual["ownership_percentage"], 81)
+        self.assertIn("owner", [capacity["name"] for capacity in individual["capacities"]])
 
     def test_direct_ownership_does_not_leak_across_adjacent_owner_clauses(self):
         parties = [

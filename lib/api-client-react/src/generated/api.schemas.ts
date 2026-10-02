@@ -63,6 +63,7 @@ export type SopGuarantorRowStatus = typeof SopGuarantorRowStatus[keyof typeof So
 
 export const SopGuarantorRowStatus = {
   required: 'required',
+  not_required: 'not_required',
   unresolved: 'unresolved',
 } as const;
 

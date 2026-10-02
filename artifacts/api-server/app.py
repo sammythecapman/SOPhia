@@ -13,6 +13,7 @@ from pgvector import Vector
 
 from applicability import (
     APPLICABILITY_DIMENSIONS,
+    applicability_dimension_conflicts,
     applicability_check,
     classify_question,
     classify_text,
@@ -386,6 +387,77 @@ def fallback_plan(question: str) -> list[dict[str, Any]]:
     ]
 
 
+SELLER_NOTE_TOPIC_RE = re.compile(
+    r"\bseller[-\s]?note\b|\bseller[-\s]?financ(?:ed|ing)\b",
+    re.IGNORECASE,
+)
+
+
+def ensure_seller_note_subquestion(
+    question: str, plan: list[dict[str, Any]]
+) -> list[dict[str, Any]]:
+    """Keep seller-note policy as a separate retrieval issue in compound queries."""
+
+    if not SELLER_NOTE_TOPIC_RE.search(question):
+        return plan
+
+    for item in plan:
+        item_question = item.get("question")
+        if (
+            not isinstance(item_question, str)
+            or not SELLER_NOTE_TOPIC_RE.search(item_question)
+            or not has_guaranty_intent(item_question)
+        ):
+            continue
+        # A planner may leave guaranty and seller-note policy in one issue.
+        # Keep this item focused on guaranty rules; the seller-note question
+        # is retained or added separately below.
+        item["question"] = (
+            "What guaranty requirements apply to the stated transaction and "
+            "ownership facts?"
+        )
+        item["search_terms"] = [
+            term
+            for term in item.get("search_terms", [])
+            if isinstance(term, str) and not SELLER_NOTE_TOPIC_RE.search(term)
+        ]
+        if GUARANTY_RETRIEVAL_QUERY not in item["search_terms"]:
+            item["search_terms"].append(GUARANTY_RETRIEVAL_QUERY)
+        item["material_facts"] = [
+            fact
+            for fact in item.get("material_facts", [])
+            if isinstance(fact, str) and not SELLER_NOTE_TOPIC_RE.search(fact)
+        ]
+
+    dedicated_note_items = [
+        item
+        for item in plan
+        if isinstance(item.get("question"), str)
+        and SELLER_NOTE_TOPIC_RE.search(item["question"])
+        and not has_guaranty_intent(item["question"])
+    ]
+    if dedicated_note_items:
+        for item in dedicated_note_items:
+            search_terms = item.setdefault("search_terms", [])
+            if SELLER_NOTE_RETRIEVAL_QUERY not in search_terms:
+                search_terms.append(SELLER_NOTE_RETRIEVAL_QUERY)
+        return plan
+
+    note_facts = [
+        part.strip()
+        for part in re.split(r"(?<=[.!?])\s+", question)
+        if SELLER_NOTE_TOPIC_RE.search(part)
+    ]
+    return [
+        *plan,
+        {
+            "question": "What seller-note requirements apply to the stated transaction?",
+            "material_facts": note_facts or [question],
+            "search_terms": [SELLER_NOTE_RETRIEVAL_QUERY],
+        },
+    ]
+
+
 def build_retrieval_searches(
     subquestion: str,
     search_terms: list[str] | None = None,
@@ -465,7 +537,10 @@ def lexical_retrieval_seeds(
 def build_search_terms(text: str) -> list[str]:
     terms: list[str] = []
     lower = text.casefold()
-    if re.search(r"seller[-\s]?financ|seller note|standby|subordinated debt", lower):
+    if re.search(
+        r"seller[-\s]?financ|seller[-\s]?note|standby|subordinated debt",
+        lower,
+    ):
         terms.append(SELLER_NOTE_RETRIEVAL_QUERY)
     if re.search(r"equity injection|injection|project cost", lower):
         terms.append(EQUITY_RETRIEVAL_QUERY)
@@ -673,13 +748,25 @@ def _percent_mentions(text: str) -> list[tuple[str, float]]:
 def _row_text(row: dict[str, Any]) -> str:
     ownership = ""
     if row.get("ownership_percentage") is not None:
-        ownership = (
-            f" Ownership: {row['ownership_percentage']:g} percent."
-            f" {row.get('ownership_comparison') or ''}"
+        ownership = f" Ownership: {row['ownership_percentage']:g} percent."
+    comparison = row.get("ownership_comparison")
+    comparison_text = f" {comparison}" if comparison else ""
+    if row.get("status") == "not_required":
+        party_text = (
+            f"{row['party']} is not required to provide a guaranty under this provision."
+        )
+    elif row.get("status") == "unresolved":
+        party_text = (
+            f"Guaranty treatment for {row['party']} as {row['capacity']} is unresolved."
+        )
+    else:
+        party_text = (
+            f"{row['party']} must be treated as a {row['capacity']} "
+            "for guaranty purposes."
         )
     return (
-        f"{row['party']} must be treated as a {row['capacity']} for guaranty purposes."
-        f"{ownership} Guaranty type: {row['guaranty_type']}. "
+        f"{party_text}{ownership}{comparison_text} "
+        f"Guaranty type: {row['guaranty_type']}. "
         f"Trigger: {row['triggering_provision']}. "
         f"Additional conditions: {row['additional_conditions']}. "
         f"Status: {row['status']}."
@@ -1009,8 +1096,9 @@ def derive_policy_issue(
                 {
                     "role": "user",
                     "content": (
-                        f"ORIGINAL QUESTION:\n{original_question}\n\n"
-                        f"RETRIEVAL SEED:\n{retrieval_seed}\n\n"
+                        f"ORIGINAL QUESTION (factual context only; do not derive "
+                        f"other issues from it):\n{original_question}\n\n"
+                        f"RETRIEVAL SEED (the only issue to derive):\n{retrieval_seed}\n\n"
                         f"SOURCE PASSAGES:\n{source_context}"
                     ),
                 },
@@ -1064,14 +1152,22 @@ def derive_policy_issue(
             source_issue_text = "Policy issue: " + " ".join(
                 clause["quote"] for clause in clauses
             )
-            return {
-                "text": source_issue_text,
-                "source_ids": sorted(
-                    {clause["source_id"] for clause in clauses if clause["source_id"] in source_ids}
-                ),
-                "clauses": clauses,
-                "unresolved": False,
-            }
+            evidence_text = "\n".join(clause["quote"] for clause in clauses)
+            if conclusion_has_cited_issue_focus(
+                retrieval_seed, source_issue_text, evidence_text
+            ):
+                return {
+                    "text": source_issue_text,
+                    "source_ids": sorted(
+                        {
+                            clause["source_id"]
+                            for clause in clauses
+                            if clause["source_id"] in source_ids
+                        }
+                    ),
+                    "clauses": clauses,
+                    "unresolved": False,
+                }
     except Exception:
         app.logger.exception("Source-derived policy issue generation failed")
 
@@ -1103,7 +1199,7 @@ def derive_policy_issue(
 def augment_extracted_party_capacities(
     fact_text: str, parties: list[dict[str, Any]]
 ) -> list[dict[str, Any]]:
-    """Preserve explicit direct-ownership facts the extractor may label too broadly."""
+    """Preserve explicit ownership facts the extractor may omit or label too broadly."""
 
     direct_ownership: list[tuple[str, float]] = []
     explicit_ownership_claim = re.compile(
@@ -1149,6 +1245,57 @@ def augment_extracted_party_capacities(
             if not party:
                 continue
             direct_ownership.append((party, float(match.group("percentage"))))
+
+    ownership_at_mentions: list[tuple[str, float]] = []
+    ownership_at_pattern = re.compile(
+        r"(?P<context>[^.!?;\n]{1,140}?)\s+at\s+"
+        r"(?P<percentage>\d+(?:\.\d+)?)\s*(?:%|\bpercent\b)",
+        re.IGNORECASE,
+    )
+    ownership_context_pattern = re.compile(
+        r"\b(?:own(?:s|ed)?|holds?|held|holding|ownership)\b",
+        re.IGNORECASE,
+    )
+    sentence_boundary_pattern = re.compile(r"[!?;\n]|(?<!\d)\.(?!\d)")
+    for match in ownership_at_pattern.finditer(fact_text):
+        clause_start = max(
+            (
+                boundary.end()
+                for boundary in sentence_boundary_pattern.finditer(
+                    fact_text[: match.start()]
+                )
+            ),
+            default=0,
+        )
+        clause_prefix = fact_text[clause_start : match.start()]
+        if not ownership_context_pattern.search(clause_prefix):
+            continue
+
+        party_label = re.sub(
+            r"^\s*(?:(?:and|or|but)\s+)+",
+            "",
+            match.group("context"),
+            flags=re.IGNORECASE,
+        )
+        ownership_relation = re.search(
+            r"\b(?:is\s+owned\s+by|owned\s+by|owns?|holds?)\b",
+            party_label,
+            re.IGNORECASE,
+        )
+        if ownership_relation:
+            party_label = party_label[ownership_relation.end() :]
+        party_label = re.sub(
+            r"^\s*(?:(?:\d+|one|two|three|four|five|several|multiple|"
+            r"each|another|a|an|the)\s+)+",
+            "",
+            party_label,
+            flags=re.IGNORECASE,
+        ).strip(" ,:-")
+        if not re.search(r"[A-Za-z0-9]", party_label):
+            continue
+        ownership_at_mentions.append(
+            (party_label, float(match.group("percentage")))
+        )
 
     augmented: list[dict[str, Any]] = []
     for party in parties:
@@ -1210,6 +1357,64 @@ def augment_extracted_party_capacities(
                     ],
                 }
             )
+
+    def party_terms(value: str) -> set[str]:
+        return {
+            token
+            for token in re.findall(r"[a-z0-9]+", value.casefold())
+            if token not in {"a", "an", "the", "one", "each"}
+        }
+
+    for party_label, percentage in ownership_at_mentions:
+        label_terms = party_terms(party_label)
+        if not label_terms:
+            continue
+        matching_parties = [
+            party
+            for party in augmented
+            if (name_terms := party_terms(str(party.get("party", ""))))
+            and (
+                label_terms.issubset(name_terms)
+                or name_terms.issubset(label_terms)
+            )
+        ]
+        if len(matching_parties) > 1:
+            continue
+
+        if matching_parties:
+            party = matching_parties[0]
+            party["ownership_percentage"] = percentage
+            capacities = list(party.get("capacities", []))
+            if not any(
+                re.search(r"\b(?:owner|holder)\b", str(capacity.get("name", "")), re.I)
+                for capacity in capacities
+            ):
+                capacities.append(
+                    {
+                        "name": "owner",
+                        "evidence": (
+                            f"The facts identify this party at {percentage:g} percent ownership."
+                        ),
+                    }
+                )
+            party["capacities"] = capacities
+            continue
+
+        display_party = party_label[:1].upper() + party_label[1:]
+        augmented.append(
+            {
+                "party": display_party,
+                "ownership_percentage": percentage,
+                "capacities": [
+                    {
+                        "name": "owner",
+                        "evidence": (
+                            f"The facts identify this party at {percentage:g} percent ownership."
+                        ),
+                    }
+                ],
+            }
+        )
     return augmented
 
 
@@ -1222,11 +1427,19 @@ def enumerate_guarantor_rows(
 
     if not sources:
         return []
-    enumeration_sources = [
+    guaranty_specific_sources = [
+        source
+        for source in sources
+        if re.search(
+            r"\bguarant(?:y|ee|ies|or)\b",
+            f"{source.section_ref}\n{source.chunk_text}",
+            re.IGNORECASE,
+        )
+    ]
+    enumeration_sources = guaranty_specific_sources or [
         source
         for source in sources
         if NORMATIVE_LANGUAGE_RE.search(source.chunk_text)
-        or re.search(r"\bguarant(?:y|ee|ies|or)\b", source.chunk_text, re.IGNORECASE)
     ] or sources
     source_context = format_context(enumeration_sources)
     try:
@@ -1433,9 +1646,32 @@ def enumerate_guarantor_rows_from_inputs(
 ) -> list[dict[str, Any]]:
     """Return one row for every party-capacity and matching admitted provision."""
 
-    def provision_applies(provision: dict[str, Any], ownership: Any) -> bool:
-        if not isinstance(ownership, (int, float)):
-            return True
+    threshold_pattern = re.compile(
+        r"(?P<value>\d+(?:\.\d+)?)\s*%\s*"
+        r"(?P<operator>or\s+more|or\s+greater|or\s+higher|at\s+least|"
+        r"or\s+less|or\s+lower|at\s+most|less\s+than|below|under|"
+        r"more\s+than|greater\s+than|above|over)",
+        re.IGNORECASE,
+    )
+    aggregation_pattern = re.compile(
+        r"\b(?:in\s+the\s+aggregate|aggregat(?:e|ed|ion)|collectively|combined)\b",
+        re.IGNORECASE,
+    )
+    subject_noise = {
+        "one",
+        "more",
+        "each",
+        "all",
+        "any",
+        "multiple",
+        "several",
+        "applicant",
+        "ownership",
+        "percentage",
+        "aggregate",
+    }
+
+    def threshold_checks(provision: dict[str, Any]) -> list[tuple[float, str]]:
         text = " ".join(
             [
                 str(provision.get("quote", "")),
@@ -1443,15 +1679,21 @@ def enumerate_guarantor_rows_from_inputs(
                 str(provision.get("conditions", "")),
             ]
         ).casefold()
-        for match in re.finditer(
-            r"(?P<value>\d+(?:\.\d+)?)\s*%\s*"
-            r"(?P<operator>or\s+more|or\s+greater|or\s+higher|at\s+least|"
-            r"or\s+less|or\s+lower|at\s+most|less\s+than|below|under|"
-            r"more\s+than|greater\s+than|above|over)",
-            text,
-        ):
-            threshold = float(match.group("value"))
-            operator = re.sub(r"\s+", " ", match.group("operator"))
+        return [
+            (
+                float(match.group("value")),
+                re.sub(r"\s+", " ", match.group("operator")),
+            )
+            for match in threshold_pattern.finditer(text)
+        ]
+
+    def threshold_result(
+        provision: dict[str, Any], ownership: Any
+    ) -> bool | None:
+        if not isinstance(ownership, (int, float)) or isinstance(ownership, bool):
+            return None
+        checks = []
+        for threshold, operator in threshold_checks(provision):
             comparisons = {
                 "or more": ownership >= threshold,
                 "or greater": ownership >= threshold,
@@ -1468,9 +1710,108 @@ def enumerate_guarantor_rows_from_inputs(
                 "above": ownership > threshold,
                 "over": ownership > threshold,
             }
-            if operator in comparisons and not comparisons[operator]:
-                return False
-        return True
+            if operator in comparisons:
+                checks.append(comparisons[operator])
+        return all(checks) if checks else True
+
+    def party_terms(party: dict[str, Any]) -> set[str]:
+        capacity_text = " ".join(
+            f"{capacity.get('name', '')} {capacity.get('evidence', '')}"
+            for capacity in party.get("capacities", [])
+            if isinstance(capacity, dict)
+        )
+        return _normalized_policy_terms(
+            f"{party.get('party', '')} {party.get('party_type', '')} {capacity_text}"
+        )
+
+    def aggregation_scope(
+        provision: dict[str, Any],
+    ) -> dict[str, Any] | None:
+        quote = str(provision.get("quote", ""))
+        evidence = " ".join(
+            (
+                quote,
+                str(provision.get("obligation_text", "")),
+                str(provision.get("conditions", "")),
+            )
+        )
+        if not aggregation_pattern.search(evidence):
+            return None
+
+        group_match = re.search(
+            r"\b(?:one\s+or\s+more|multiple|several|all)\s+"
+            r"(?P<group>[^,;.!?]+?)\s+"
+            r"(?:own|owns|hold|holds|have|has)\b",
+            quote,
+            re.IGNORECASE,
+        )
+        if group_match:
+            group_label = re.sub(r"\([^)]*\)", " ", group_match.group("group"))
+            group_label = re.sub(r"\s+", " ", group_label).strip(" ,")
+            group_terms = _normalized_policy_terms(group_label)
+        else:
+            group_label = " ".join(
+                str(term) for term in provision.get("subject_terms", [])
+            ).strip()
+            group_terms = _normalized_policy_terms(group_label) & (
+                _normalized_policy_terms(quote)
+            )
+
+        group_terms -= subject_noise
+        return {
+            "group_terms": group_terms,
+            "group_label": group_label or "source-defined group",
+            "scope_resolved": bool(group_terms),
+        }
+
+    aggregation_by_provision: dict[int, dict[str, Any]] = {}
+    for provision_index, provision in enumerate(provisions):
+        scope = aggregation_scope(provision)
+        if scope is None:
+            continue
+        members = {
+            party_index
+            for party_index, party in enumerate(parties)
+            if scope["scope_resolved"]
+            and scope["group_terms"].issubset(party_terms(party))
+        }
+        ownership_values = [
+            parties[party_index].get("ownership_percentage")
+            for party_index in members
+        ]
+        ownership_is_complete = bool(members) and all(
+            isinstance(value, (int, float)) and not isinstance(value, bool)
+            for value in ownership_values
+        )
+        aggregation_by_provision[provision_index] = {
+            **scope,
+            "members": members,
+            "ownership_percentage": (
+                sum(ownership_values) if ownership_is_complete else None
+            ),
+        }
+
+    def other_owner_context(aggregation: dict[str, Any]) -> str:
+        other_owners = []
+        group_members = aggregation.get("members", set())
+        for owner_index, owner in enumerate(parties):
+            ownership = owner.get("ownership_percentage")
+            if (
+                owner_index in group_members
+                or not isinstance(ownership, (int, float))
+                or isinstance(ownership, bool)
+            ):
+                continue
+            other_owners.append(
+                f"{str(owner.get('party', 'Owner')).strip()} at {ownership:g} percent"
+            )
+        if not other_owners:
+            return ""
+        return (
+            f" Other stated owners outside the source-defined "
+            f"{aggregation['group_label']} group: {', '.join(other_owners)}. "
+            "These percentages are not included in the group total."
+        )
 
     def source_capacity_label(
         provision: dict[str, Any], extracted_capacity: str
@@ -1488,7 +1829,7 @@ def enumerate_guarantor_rows_from_inputs(
         return extracted_capacity
 
     rows: list[dict[str, Any]] = []
-    for party in parties:
+    for party_index, party in enumerate(parties):
         capacities = party["capacities"] or [
             {
                 "name": "unresolved capacity",
@@ -1504,16 +1845,20 @@ def enumerate_guarantor_rows_from_inputs(
                 f"{capacity['name']} {capacity.get('evidence', '')}"
             )
             matched_provisions: list[dict[str, Any]] = []
-            for provision in provisions:
+            threshold_not_met: list[tuple[dict[str, Any], Any, dict[str, Any] | None]] = []
+            unresolved_aggregations: list[tuple[dict[str, Any], dict[str, Any]]] = []
+            for provision_index, provision in enumerate(provisions):
                 if provision.get("cardinality_constraint"):
                     continue
-                if not provision_applies(
-                    provision, party.get("ownership_percentage")
-                ):
-                    continue
+                aggregation = aggregation_by_provision.get(provision_index)
+                if aggregation and aggregation["scope_resolved"]:
+                    if party_index not in aggregation["members"]:
+                        continue
+
                 subject_terms = _normalized_policy_terms(
                     " ".join(provision.get("subject_terms", []))
                 )
+                subject_terms -= subject_noise
                 provision_capacity_terms = _normalized_policy_terms(
                     " ".join(provision.get("capacity_terms", []))
                 )
@@ -1535,11 +1880,125 @@ def enumerate_guarantor_rows_from_inputs(
                 )
                 if not role_capacity_terms:
                     capacity_matches = True
-                if provision.get("applies_to_all") or (
-                    subject_matches and capacity_matches
-                ):
-                    matched_provisions.append(provision)
+                if aggregation and aggregation["scope_resolved"]:
+                    subject_matches = party_index in aggregation["members"]
+                matches_party = (
+                    provision.get("applies_to_all")
+                    or (subject_matches and capacity_matches)
+                )
+                if not matches_party:
+                    continue
+
+                if aggregation and not aggregation["scope_resolved"]:
+                    unresolved_aggregations.append((provision, aggregation))
+                    continue
+
+                comparison_ownership = (
+                    aggregation["ownership_percentage"]
+                    if aggregation
+                    else party.get("ownership_percentage")
+                )
+                if aggregation and comparison_ownership is None:
+                    unresolved_aggregations.append((provision, aggregation))
+                    continue
+
+                applies = threshold_result(provision, comparison_ownership)
+                if applies is False:
+                    threshold_not_met.append(
+                        (provision, comparison_ownership, aggregation)
+                    )
+                else:
+                    matched_provisions.append(
+                        {
+                            "provision": provision,
+                            "aggregation": aggregation,
+                            "comparison_ownership": comparison_ownership,
+                        }
+                    )
             if not matched_provisions:
+                if threshold_not_met:
+                    for provision, comparison_ownership, aggregation in threshold_not_met:
+                        thresholds = ", ".join(
+                            f"{value:g}% {operator}"
+                            for value, operator in threshold_checks(provision)
+                        )
+                        if aggregation:
+                            ownership_comparison = (
+                                f"{party['party']} ownership is "
+                                f"{party.get('ownership_percentage'):g} percent; "
+                                f"aggregate ownership across "
+                                f"{len(aggregation['members'])} "
+                                f"{aggregation['group_label']} is "
+                                f"{comparison_ownership:g} percent."
+                                f"{other_owner_context(aggregation)}"
+                            )
+                        else:
+                            ownership_comparison = (
+                                f"Ownership is {comparison_ownership:g} percent."
+                            )
+                        if thresholds:
+                            ownership_comparison += (
+                                f" This does not meet the cited threshold ({thresholds})."
+                            )
+                        rows.append(
+                            {
+                                "party": party["party"],
+                                "capacity": capacity["name"],
+                                "ownership_percentage": party.get(
+                                    "ownership_percentage"
+                                ),
+                                "ownership_comparison": ownership_comparison,
+                                "guaranty_type": "Not triggered",
+                                "triggering_provision": provision.get(
+                                    "obligation_text", ""
+                                ),
+                                "additional_conditions": (
+                                    "The stated ownership facts do not meet this "
+                                    "provision's threshold."
+                                ),
+                                "status": "not_required",
+                                "citations": [
+                                    {
+                                        "source_id": provision["source_id"],
+                                        "quote": provision["quote"],
+                                    }
+                                ],
+                            }
+                        )
+                    continue
+                if unresolved_aggregations:
+                    provision, aggregation = unresolved_aggregations[0]
+                    rows.append(
+                        {
+                            "party": party["party"],
+                            "capacity": capacity["name"],
+                            "ownership_percentage": party.get(
+                                "ownership_percentage"
+                            ),
+                            "ownership_comparison": None,
+                            "guaranty_type": "Unresolved",
+                            "triggering_provision": provision.get(
+                                "obligation_text", ""
+                            ),
+                            "additional_conditions": (
+                                "The source requires an aggregate ownership "
+                                "comparison, but the covered owners or their "
+                                "ownership amounts are incomplete."
+                            ),
+                            "status": "unresolved",
+                            "unresolved_reason": (
+                                "Aggregate ownership could not be established "
+                                "from the extracted party facts."
+                            ),
+                            "citations": [
+                                {
+                                    "source_id": provision["source_id"],
+                                    "quote": provision["quote"],
+                                }
+                            ],
+                        }
+                    )
+                    continue
                 rows.append(
                     {
                         "party": party["party"],
@@ -1563,13 +2022,38 @@ def enumerate_guarantor_rows_from_inputs(
                     }
                 )
                 continue
-            for provision in matched_provisions:
+            for matched in matched_provisions:
+                provision = matched["provision"]
+                aggregation = matched["aggregation"]
+                comparison_ownership = matched["comparison_ownership"]
+                threshold_text = ", ".join(
+                    f"{value:g}% {operator}"
+                    for value, operator in threshold_checks(provision)
+                )
+                ownership_comparison = None
+                if aggregation:
+                    individual_ownership = party.get("ownership_percentage")
+                    ownership_comparison = (
+                        f"{party['party']} ownership is {individual_ownership:g} percent; "
+                        f"aggregate ownership across {len(aggregation['members'])} "
+                        f"{aggregation['group_label']} is "
+                        f"{comparison_ownership:g} percent."
+                        f"{other_owner_context(aggregation)}"
+                    )
+                elif isinstance(comparison_ownership, (int, float)) and threshold_text:
+                    ownership_comparison = (
+                        f"Ownership is {comparison_ownership:g} percent."
+                    )
+                if ownership_comparison and threshold_text:
+                    ownership_comparison += (
+                        f" This meets the cited threshold ({threshold_text})."
+                    )
                 rows.append(
                     {
                         "party": party["party"],
                         "capacity": source_capacity_label(provision, capacity["name"]),
                         "ownership_percentage": party.get("ownership_percentage"),
-                        "ownership_comparison": None,
+                        "ownership_comparison": ownership_comparison,
                         "guaranty_type": provision.get("guaranty_type", ""),
                         "triggering_provision": provision.get("obligation_text", ""),
                         "additional_conditions": provision.get("conditions", ""),
@@ -1583,6 +2067,55 @@ def enumerate_guarantor_rows_from_inputs(
                     }
                 )
     return rows
+
+
+def clarify_requested_guaranty_wording(
+    question: str,
+    rows: list[dict[str, Any]],
+    sources: list[RetrievedSource],
+) -> None:
+    """Clarify when a trust-specific obligation uses a different guaranty label."""
+
+    if not re.search(
+        r"\bfull\s+unconditional\s+guarant(?:y|ee)\b",
+        question,
+        re.IGNORECASE,
+    ):
+        return
+
+    source_by_id = {source.source_id: source for source in sources}
+    for row in rows:
+        if row.get("status") != "required" or not re.search(
+            r"\btrust\b",
+            " ".join(
+                str(row.get(field, ""))
+                for field in ("party", "capacity", "triggering_provision")
+            ),
+            re.IGNORECASE,
+        ):
+            continue
+        guaranty_type = str(row.get("guaranty_type", ""))
+        if not re.search(r"\bunlimited\s+full\s+guarant", guaranty_type, re.I):
+            continue
+        cited_text = "\n".join(
+            source_by_id[source_id].chunk_text
+            for citation in row.get("citations", [])
+            if isinstance(citation, dict)
+            and (source_id := citation.get("source_id")) in source_by_id
+        )
+        if not re.search(r"\bunlimited\s+full\s+guarant", cited_text, re.I):
+            continue
+
+        clarification = (
+            "Term clarification: the cited trust-specific provision requires an "
+            "unlimited full guaranty; “full unconditional guaranty” is not the "
+            "wording of that obligation."
+        )
+        conditions = str(row.get("additional_conditions", "")).strip()
+        if clarification not in conditions:
+            row["additional_conditions"] = " ".join(
+                part for part in (conditions, clarification) if part
+            )
 
 
 def parse_money_from_text(text: str) -> float | None:
@@ -1976,7 +2509,13 @@ def query_sop():
                 for db_id in db_ids
                 if db_id in source_by_db_id
             ]
-            context_sources = select_context_sources(context_sources)
+            context_sources = select_context_sources(
+                context_sources,
+                prioritize_seller_note=bool(
+                    SELLER_NOTE_TOPIC_RE.search(retrieval_seed)
+                    and not has_guaranty_intent(retrieval_seed)
+                ),
+            )
             # Only user-supplied facts determine applicability. The planning
             # model may restate or overgeneralize a subquestion, so it must not
             # introduce a new transaction type or negate an explicit exclusion.
@@ -2002,8 +2541,8 @@ def query_sop():
                 for dimension in APPLICABILITY_DIMENSIONS:
                     source_values = set(tags.get(dimension, []))
                     fact_values = set(fact_tags.get(dimension, []))
-                    if source_values and fact_values and not source_values.intersection(
-                        fact_values
+                    if applicability_dimension_conflicts(
+                        dimension, source_values, fact_values
                     ):
                         excluded_dimension = dimension
                         break
@@ -2210,6 +2749,9 @@ def query_sop():
         if has_guaranty_intent(question) and applicable_source_pool:
             pooled_sources = list(applicable_source_pool.values())
             pooled_rows = enumerate_guarantor_rows(client, question, pooled_sources)
+            clarify_requested_guaranty_wording(
+                question, pooled_rows, pooled_sources
+            )
             pooled_source_ids = {source.source_id for source in pooled_sources}
             for row in pooled_rows:
                 row_source_ids = {
@@ -2673,22 +3215,27 @@ def query_sop():
             subanswer["applied_conclusion"]["text"]
             for subanswer in rendered_subanswers
             if subanswer.get("applied_conclusion")
-        ][:3]
+        ][:4]
         summary = " ".join(summary_sentences)
+        has_applied_summary = bool(summary)
         assumptions: list[str] = []
         if standard_product_assumed:
             assumptions.append(
                 "No loan product was specified; this analysis treats the transaction "
                 "as a Standard 7(a) loan."
             )
-        if not summary:
+        if not has_applied_summary:
             summary = "No applied conclusion was established from the retrieved SOP provisions."
-        answer_parts = [summary]
-        for subanswer in rendered_subanswers:
-            if len(rendered_subanswers) > 1:
+        answer_parts: list[str] = []
+        if has_applied_summary:
+            answer_parts.append(summary)
+        elif len(rendered_subanswers) > 1:
+            for subanswer in rendered_subanswers:
                 answer_parts.append(f"{subanswer['question']}\n{subanswer['answer']}")
-            elif subanswer["answer"] != summary:
-                answer_parts.append(subanswer["answer"])
+        elif rendered_subanswers:
+            answer_parts.append(rendered_subanswers[0]["answer"])
+        else:
+            answer_parts.append(summary)
         if rendered_issues:
             answer_parts.append(
                 "Other issues identified:\n"
@@ -2832,7 +3379,7 @@ def decompose_question(client: OpenAI, question: str) -> list[dict[str, Any]]:
                     r"\b(and|also|whether)\b", question, re.IGNORECASE
                 ):
                     return fallback_plan(question)
-                return [
+                plan = [
                     {
                         "question": item["question"].strip(),
                         "material_facts": [
@@ -2853,9 +3400,10 @@ def decompose_question(client: OpenAI, question: str) -> list[dict[str, Any]]:
                     }
                     for item in valid[:4]
                 ]
+                return ensure_seller_note_subquestion(question, plan)
     except Exception:
         app.logger.exception("Question decomposition failed; using the original question")
-    return fallback_plan(question)
+    return ensure_seller_note_subquestion(question, fallback_plan(question))
 
 
 def fetch_adjacent_chunk_rows(
@@ -2903,10 +3451,26 @@ def fetch_adjacent_chunk_rows(
 def select_context_sources(
     sources: list[RetrievedSource],
     limit: int = MAX_CONTEXT_SOURCES,
+    prioritize_seller_note: bool = False,
 ) -> list[RetrievedSource]:
     """Keep immediate same-section neighbors together when trimming model context."""
     by_db_id = {source.db_id: source for source in sources}
-    ordered = sorted(sources, key=lambda source: source.similarity, reverse=True)
+    def seller_note_priority(source: RetrievedSource) -> int:
+        if not prioritize_seller_note:
+            return 0
+        section = source.section_ref.casefold()
+        text = source.chunk_text.casefold()
+        if "debt refinancing" in section and "seller-financed note" in text:
+            return 2
+        if "equity requirements" in section and "seller debt that is subordinated" in text:
+            return 1
+        return 0
+
+    ordered = sorted(
+        sources,
+        key=lambda source: (seller_note_priority(source), source.similarity),
+        reverse=True,
+    )
     selected: list[RetrievedSource] = []
     selected_ids: set[int] = set()
     for source in ordered:
@@ -2943,34 +3507,59 @@ def retrieve_for_subquestion(
     material_facts: list[str] | None = None,
     original_question: str = "",
 ) -> list[RetrievedSource]:
+    seller_note_requested = bool(SELLER_NOTE_TOPIC_RE.search(subquestion))
+    seller_note_only = (
+        seller_note_requested and not has_guaranty_intent(subquestion)
+    )
+    retrieval_search_terms = [
+        term
+        for term in (search_terms or [])
+        if not (seller_note_only and has_guaranty_intent(term))
+    ]
+    retrieval_material_facts = [
+        fact
+        for fact in (material_facts or [])
+        if not (seller_note_only and has_guaranty_intent(fact))
+    ]
+    topic_context = " ".join(
+        [subquestion, *retrieval_search_terms, *retrieval_material_facts]
+    )
+    retrieval_original_question = "" if seller_note_only else original_question
     searches = build_retrieval_searches(
         subquestion,
-        search_terms,
-        material_facts,
-        original_question,
+        retrieval_search_terms,
+        retrieval_material_facts,
+        retrieval_original_question,
     )
     retrieval_context = " ".join(
-        [subquestion, *(search_terms or []), *(material_facts or []), original_question]
+        [
+            subquestion,
+            *retrieval_search_terms,
+            *retrieval_material_facts,
+            retrieval_original_question,
+        ]
     )
-    if has_guaranty_intent(retrieval_context):
+    if not seller_note_only and has_guaranty_intent(topic_context):
         searches.append(GUARANTY_RETRIEVAL_QUERY)
     if re.search(r"\b(robs|401\s*\(k\)|retirement trust|plan sponsor|plan trustee)\b", subquestion, re.IGNORECASE):
         searches.append(ROBS_RETRIEVAL_QUERY)
     if re.search(r"\bequity injection\b", subquestion, re.IGNORECASE):
         searches.append(EQUITY_RETRIEVAL_QUERY)
+    topic_search_text = f"{subquestion} {' '.join(retrieval_search_terms)}"
     if re.search(
-        r"seller[-\s]?financ|seller note|standby|subordinated debt|equity injection|"
+        r"seller[-\s]?financ|seller[-\s]?note|standby|subordinated debt|equity injection|"
         r"project cost|startup|start-up",
-        f"{subquestion} {' '.join(search_terms or [])}",
+        topic_search_text,
         re.IGNORECASE,
     ):
         searches.extend(
             [
                 SELLER_NOTE_RETRIEVAL_QUERY,
-                STARTUP_INJECTION_RETRIEVAL_QUERY,
                 CHANGE_OWNERSHIP_INJECTION_RETRIEVAL_QUERY,
             ]
         )
+        if re.search(r"startup|start-up", topic_search_text, re.IGNORECASE):
+            searches.append(STARTUP_INJECTION_RETRIEVAL_QUERY)
 
     by_db_id: dict[int, RetrievedSource] = {}
     vector_anchor_ids: set[int] = set()
@@ -3025,9 +3614,9 @@ def retrieve_for_subquestion(
         vector_anchor_ids.update(row[0] for row in rows)
     for lexical_query in lexical_retrieval_seeds(
         subquestion,
-        search_terms,
-        material_facts,
-        original_question,
+        retrieval_search_terms,
+        retrieval_material_facts,
+        retrieval_original_question,
     ):
         rows = conn.execute(
             """
@@ -3061,7 +3650,7 @@ def retrieve_for_subquestion(
         ).fetchall()
         add_rows(rows)
         vector_anchor_ids.update(row[0] for row in rows)
-    if has_guaranty_intent(retrieval_context):
+    if not seller_note_only and has_guaranty_intent(topic_context):
         direct_rows = conn.execute(
             """
             SELECT id, sop_version, effective_date, page_number, section_ref,
@@ -3079,6 +3668,35 @@ def retrieve_for_subquestion(
             (sop_version, corpus_sha256),
         ).fetchall()
         add_rows(direct_rows)
+    if seller_note_requested:
+        seller_note_rows = conn.execute(
+            """
+            SELECT id, sop_version, effective_date, page_number, section_ref,
+                   chunk_text, 1.0 AS similarity,
+                   transaction_types, entity_structures, party_roles, program_scopes,
+                   product_lines, loan_size_bands
+            FROM sop_chunks
+            WHERE sop_version = %s AND corpus_sha256 = %s
+              AND (
+                (section_ref ILIKE '%%> Debt Refinancing%%'
+                 AND chunk_text ILIKE '%%seller-financed Note%%')
+                OR (
+                  section_ref ILIKE '%%> Equity Requirements%%'
+                  AND chunk_text ILIKE '%%Seller debt that is subordinated%%'
+                )
+              )
+            ORDER BY CASE
+                       WHEN section_ref ILIKE '%%> Debt Refinancing%%' THEN 0
+                       WHEN section_ref ILIKE '%%> Equity Requirements%%' THEN 1
+                       ELSE 2
+                     END,
+                     id
+            LIMIT 8
+            """
+            ,
+            (sop_version, corpus_sha256),
+        ).fetchall()
+        add_rows(seller_note_rows)
     if re.search(
         r"\besop\b|employee stock ownership",
         retrieval_context,
@@ -3150,9 +3768,9 @@ def retrieve_for_subquestion(
         ).fetchall()
         add_rows(collateral_rows)
     if re.search(
-        r"seller[-\s]?financ|seller note|standby|subordinated debt|equity injection|"
+        r"seller[-\s]?financ|seller[-\s]?note|standby|subordinated debt|equity injection|"
         r"project cost|startup|start-up|injection",
-        retrieval_context,
+        topic_context,
         re.IGNORECASE,
     ):
         equity_rows = conn.execute(
@@ -3167,7 +3785,14 @@ def retrieve_for_subquestion(
                OR chunk_text ILIKE '%%seller-financed Note%%'
                OR chunk_text ILIKE '%%Standby Agreements%%'
                OR chunk_text ILIKE '%%equity injection%%')
-            ORDER BY id
+            ORDER BY CASE
+                       WHEN chunk_text ILIKE '%%Seller debt that is subordinated%%'
+                         OR chunk_text ILIKE '%%seller-financed Note%%'
+                         OR section_ref ILIKE '%%> Debt Refinancing%%'
+                       THEN 0
+                       ELSE 1
+                     END,
+                     id
             LIMIT 12
             """
             ,
@@ -3521,6 +4146,35 @@ def conclusion_has_cited_issue_focus(
     requested_terms = issue_audit_terms(requested_question)
     conclusion_terms = issue_audit_terms(conclusion)
     evidence_terms = issue_audit_terms(evidence)
+    if {"seller", "note"}.issubset(requested_terms):
+        note_rule_terms = {
+            "note",
+            "debt",
+            "subordinat",
+            "refinanc",
+        }
+        if {"market", "rate"}.issubset(requested_terms):
+            seller_note_rate_pattern = re.compile(
+                r"(?:\bseller[-\s]?note\b|\bseller[-\s]?financ(?:ed|ing)\b)"
+                r"[^.!?]{0,100}\b(?:market|interest)\s+rate\b|"
+                r"\b(?:market|interest)\s+rate\b[^.!?]{0,100}"
+                r"(?:\bseller[-\s]?note\b|\bseller[-\s]?financ(?:ed|ing)\b)",
+                re.IGNORECASE,
+            )
+            if not seller_note_rate_pattern.search(evidence):
+                return False
+        conclusion_note_terms = conclusion_terms.intersection(note_rule_terms)
+        evidence_note_terms = evidence_terms.intersection(note_rule_terms)
+        subject_terms = {"seller", "note"}
+        if not conclusion_terms.intersection(subject_terms) or not evidence_terms.intersection(
+            subject_terms
+        ):
+            return False
+        return any(
+            issue_anchor_matches(conclusion_term, evidence_term)
+            for conclusion_term in conclusion_note_terms
+            for evidence_term in evidence_note_terms
+        )
     if not requested_terms or not conclusion_terms or not evidence_terms:
         return True
     shared_focus = {
@@ -3810,7 +4464,7 @@ def audit_propositions(
             )
         }
         for index, candidate in enumerate(candidates):
-            if candidate.get("kind") == "conclusion":
+            if candidate.get("kind") in {"conclusion", "proposition"}:
                 cited_issue_text = "\n".join(
                     "\n".join(
                         [

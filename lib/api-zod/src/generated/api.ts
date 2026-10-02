@@ -126,7 +126,7 @@ export const QuerySopResponse = zod.object({
   "guaranty_type": zod.string(),
   "triggering_provision": zod.string(),
   "additional_conditions": zod.string(),
-  "status": zod.enum(['required', 'unresolved']),
+  "status": zod.enum(['required', 'not_required', 'unresolved']),
   "citations": zod.array(zod.object({
   "source_id": zod.number().int(),
   "section_ref": zod.string(),

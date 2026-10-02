@@ -17,9 +17,11 @@ APPLICABILITY_DIMENSIONS = (
 DIMENSION_LABELS = {
     "transaction_types": {
         "esop": "ESOP transactions",
+        "robs": "ROBS transactions",
         "504": "504 transactions",
         "7a": "7(a) transactions",
         "change_of_ownership": "change-of-ownership transactions",
+        "full_change_of_ownership": "full change-of-ownership transactions",
         "partial_change_of_ownership": "partial change-of-ownership transactions",
         "multi_step_change_of_ownership": "multi-step change-of-ownership transactions",
         "startup": "startup transactions",
@@ -93,6 +95,16 @@ def classify_text(text: str, section_ref: str = "") -> dict[str, list[str]]:
     )
     if re.search(r"\bnot\s+(?:an?\s+)?esop\b|without\s+esop", scope_text):
         is_esop = False
+    robs_scope_pattern = (
+        r"\brobs\b|401\s*\(\s*k\s*\)[\s\S]{0,80}\brollovers?\b|"
+        r"\brollovers?\s+as\s+business\s+start[-\s]?ups?\b"
+    )
+    is_robs = bool(
+        re.search(robs_scope_pattern, nearest_heading, re.I)
+        or (not section_ref and re.search(robs_scope_pattern, text, re.I))
+    )
+    if re.search(r"\bnot\s+(?:a\s+)?robs\b|without\s+robs", scope_text):
+        is_robs = False
     is_broad_program_heading = bool(
         re.search(
             r"7\s*\(\s*a\s*\).{0,20}504|504.{0,20}7\s*\(\s*a\s*\)",
@@ -108,12 +120,17 @@ def classify_text(text: str, section_ref: str = "") -> dict[str, list[str]]:
         re.search(r"\b7\s*\(\s*a\s*\)|\b7a\b", program_source)
         and not is_broad_program_heading
     )
-    transaction_source = nearest_heading if section_ref else lower
+    # Transaction scope follows breadcrumb ancestry: nested rules such as
+    # "Guaranties" inherit their parent "Partial Changes" or ROBS section.
+    transaction_source = section_lower if section_ref else lower
     is_partial = bool(
         re.search(r"partial\s+change\s+of\s+ownership|partial\s+change", transaction_source)
     )
     is_multi_step = bool(
         re.search(r"multi[-\s]?step\s+change\s+of\s+ownership|multi[-\s]?step", transaction_source)
+    )
+    is_full_change = bool(
+        re.search(r"\bfull\s+change\s+of\s+ownership\b", transaction_source)
     )
     is_redirect_to_appendix_15 = bool(
         re.search(r"see\s+appendix\s+15|appendix\s+15\s+for\s+change", scope_text)
@@ -136,13 +153,23 @@ def classify_text(text: str, section_ref: str = "") -> dict[str, list[str]]:
     is_franchise = bool(re.search(r"\bfranchise\b", transaction_source))
     is_expansion = bool(re.search(r"\bexpansion\b", transaction_source))
 
+    if is_robs:
+        _add(tags["transaction_types"], "robs")
     if is_esop:
         _add(tags["transaction_types"], "esop")
     if is_partial:
         _add(tags["transaction_types"], "partial_change_of_ownership")
-    elif is_multi_step:
+    if is_multi_step:
         _add(tags["transaction_types"], "multi_step_change_of_ownership")
-    elif is_change or (appendix_15 and not is_startup):
+    if is_full_change:
+        _add(tags["transaction_types"], "full_change_of_ownership")
+    if (
+        is_change
+        or is_partial
+        or is_multi_step
+        or is_full_change
+        or (appendix_15 and not is_startup)
+    ):
         _add(tags["transaction_types"], "change_of_ownership")
     if is_startup:
         _add(tags["transaction_types"], "startup")
@@ -160,8 +187,23 @@ def classify_text(text: str, section_ref: str = "") -> dict[str, list[str]]:
     if re.search(
         r"\btrust\b|trust guarant|trustee",
         nearest_heading,
-    ) or re.search(r"(?:if|when|where)\s+(?:a\s+)?trust\b.{0,90}guarant", lower):
-        if not (not section_ref and re.search(r"\bno\s+trust\b|not\s+(?:a\s+)?trust", lower)):
+    ) or re.search(r"(?:if|when|where)\s+(?:a\s+)?trust\b.{0,90}guarant", lower) or (
+        not section_ref
+        and re.search(
+            r"\b(?:retirement|revocable|irrevocable)\s+trust\b|"
+            r"\btrusts?\s+(?:at|own|owns|hold|holds)\b",
+            text,
+            re.IGNORECASE,
+        )
+    ):
+        if not (
+            not section_ref
+            and re.search(
+                r"\bno\s+(?:(?:retirement|revocable|irrevocable)\s+)?trust\b|"
+                r"\bnot\s+(?:a\s+)?(?:(?:retirement|revocable|irrevocable)\s+)?trust\b",
+                lower,
+            )
+        ):
             _add(tags["entity_structures"], "trust")
     if re.search(r"401\s*\(\s*k\s*\)|retirement|robs|profit[-\s]?sharing plan", scope_text):
         if not (
@@ -200,7 +242,16 @@ def classify_text(text: str, section_ref: str = "") -> dict[str, list[str]]:
         "robs" in role_source and re.search(r"trustee|plan trustee", scope_text)
     ):
         _add(tags["party_roles"], "trustee")
-    if re.search(r"guarant(?:y|ee|ies|or)|personal guarant", role_source):
+    if (
+        section_ref
+        and re.search(
+            r"\bguarant(?:y|ee|ies|or)\b|personal guarant",
+            nearest_heading,
+        )
+    ) or (
+        not section_ref
+        and re.search(r"\bguarantors?\b|personal guarantor", lower)
+    ):
         _add(tags["party_roles"], "guarantor")
     if re.search(
         r"selling owner.{0,30}(?:less than|under|below)\s*(?:20\s*%|20 percent)|"
@@ -328,6 +379,67 @@ def merge_tags(*tag_sets: dict[str, list[str]]) -> dict[str, list[str]]:
     return merged
 
 
+def applicability_dimension_conflicts(
+    dimension: str,
+    source_values: set[str],
+    fact_values: set[str],
+) -> bool:
+    """Return whether two populated tag sets affirmatively contradict each other."""
+
+    if not source_values or not fact_values:
+        return False
+    if dimension == "transaction_types" and (
+        (
+            "partial_change_of_ownership" in source_values
+            and "full_change_of_ownership" in fact_values
+        )
+        or (
+            "full_change_of_ownership" in source_values
+            and "partial_change_of_ownership" in fact_values
+        )
+    ):
+        return True
+    if source_values.intersection(fact_values):
+        return False
+    if dimension == "transaction_types" and (
+        (
+            "change_of_ownership" in source_values
+            and fact_values.intersection(
+                {
+                    "full_change_of_ownership",
+                    "partial_change_of_ownership",
+                    "multi_step_change_of_ownership",
+                }
+            )
+        )
+        or (
+            "change_of_ownership" in fact_values
+            and source_values.intersection(
+                {
+                    "full_change_of_ownership",
+                    "partial_change_of_ownership",
+                    "multi_step_change_of_ownership",
+                }
+            )
+        )
+    ):
+        return False
+    if dimension != "party_roles":
+        return True
+
+    exclusive_role_pairs = {
+        ("seller_retaining_ownership", "exiting_seller"),
+        ("exiting_seller", "seller_retaining_ownership"),
+        ("selling_owner_under_20", "exiting_seller"),
+        ("exiting_seller", "selling_owner_under_20"),
+    }
+    return any(
+        (source_role, fact_role) in exclusive_role_pairs
+        for source_role in source_values
+        for fact_role in fact_values
+    )
+
+
 def applicability_check(
     source_tags: dict[str, list[str]],
     fact_tags: dict[str, list[str]],
@@ -340,9 +452,9 @@ def applicability_check(
         # Missing metadata on either side is not an affirmative mismatch.
         # A provision remains admissible until both the provision and the
         # fact pattern state conflicting values for this dimension.
-        if not source_values or not fact_values:
-            continue
-        if source_values.intersection(fact_values):
+        if not applicability_dimension_conflicts(
+            dimension, source_values, fact_values
+        ):
             continue
         labels = DIMENSION_LABELS[dimension]
         source_label = ", ".join(labels.get(value, value) for value in source_values)

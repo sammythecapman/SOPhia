@@ -216,8 +216,35 @@ def handcheck_details(result: dict) -> dict:
         "verified",
         "quote_located",
     )
+    row_fields = (
+        "party",
+        "capacity",
+        "ownership_percentage",
+        "ownership_comparison",
+        "guaranty_type",
+        "triggering_provision",
+        "additional_conditions",
+        "status",
+        "unresolved_reason",
+        "citations",
+    )
+    answer = result.get("answer")
+    if not isinstance(answer, str) or not answer.strip():
+        answer = _visible_answer_text(result)
+    guarantor_rows = [
+        {
+            field: row.get(field)
+            for field in row_fields
+            if row.get(field) is not None
+        }
+        for subanswer in result.get("subanswers", [])
+        if isinstance(subanswer, dict)
+        for row in subanswer.get("guarantor_rows", [])
+        if isinstance(row, dict)
+    ]
     return {
-        "sample_answer": _visible_answer_text(result),
+        "sample_answer": answer,
+        "guarantor_rows": guarantor_rows,
         "source_citations": [
             {
                 field: source.get(field)
