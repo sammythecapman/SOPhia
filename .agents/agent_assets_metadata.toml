@@ -1,0 +1,16 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "3GZRDZep_7B_UBIH5GzQQ"
+uri = "file://outputs/sophia-production-verification.html"
+type = "html"
+title = "SOPhia production verification guide"
+description = "Self-contained guide with a Copy test script button. Collects 33 regression responses through your signed-in browser without exporting passwords, cookies, or account details; includes separate allowlist-403 instructions."
+logical_id = "96a35721-ceff-41ba-a76a-cac2ec582d8c"
+content_hash = "sha256:7650bab4aa9aac04aea860465ea652711b03bf447890c64f363c65e77fc23da4"
+size = 18951
+mtime_ms = 1790979717880
+storage_uri = "gcs://replit-rams-assets-kirk/rams/assets/repl:97d174f6-49ef-4ecf-b87d-07fc2c70ed12/96a35721-ceff-41ba-a76a-cac2ec582d8c/c4a97a12-b8df-4f2c-940a-52eb6b2184fb"
+storage_version_token = "1790979741788556"
+content_type = "text/html"

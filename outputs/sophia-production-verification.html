@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SOPhia production verification guide</title>
+<style>
+body{font:16px/1.6 system-ui,sans-serif;color:#172e46;background:#f3f6fa;margin:0}
+main{max-width:850px;margin:35px auto;padding:30px;background:white;border-radius:12px}
+h1{line-height:1.2} h2{margin-top:28px} a{color:#174f85}
+.notice{background:#edf3fa;border-left:4px solid #214b75;padding:15px}
+button{background:#214b75;color:white;border:0;border-radius:7px;padding:12px 20px;font:inherit;cursor:pointer}
+textarea{box-sizing:border-box;width:100%;height:240px;font:12px/1.4 monospace;padding:12px;margin-top:14px}
+code{background:#edf3fa;padding:2px 5px;overflow-wrap:anywhere}
+li{margin:10px 0} @media(max-width:600px){main{margin:12px;padding:20px}}
+</style></head><body><main>
+<h1>SOPhia production verification</h1>
+<p>Use your existing signed-in browser session to collect 33 regression responses.
+The two-trust aggregation question runs first. No new publish is needed.</p>
+<div class="notice"><strong>What this script does:</strong> checks the expected corpus
+hash and 395 chunks, verifies authorized sign-in and unsigned 401 rejection, then
+sends the saved regression questions one at a time. These queries use the live
+answer service and its normal query usage. It does not read or export cookies,
+passwords, account details, or request headers. It does not change the corpus or configuration.
+<br><strong>Collected responses are not a policy-test pass.</strong> Upload the report
+for citation and answer auditing.</div>
+<h2>Run the signed-in capture</h2><ol>
+<li>Open <a href="https://SOP-hia.replit.app" target="_blank" rel="noopener noreferrer">https://SOP-hia.replit.app</a>
+and sign in with an allowed account.</li>
+<li>On that SOPhia tab, open your browser's developer tools and select
+<strong>Console</strong>. In Chrome or Edge use <strong>Ctrl+Shift+J</strong>
+(Windows/Linux) or <strong>Cmd+Option+J</strong> (Mac).</li>
+<li>Review the script below, click <strong>Copy test script</strong>, and paste it
+into the Console on the SOPhia tab. Press Enter. If your browser blocks pasting,
+follow its displayed instructions only after reviewing this script.</li>
+<li>Keep the tab open until it finishes. It prints progress for every question and
+downloads a <code>sophia-production-capture-…json</code> report, including partial
+results if it stops. It can take several minutes.</li>
+<li>Upload that JSON in the Replit chat so the responses can be audited. Do not
+upload cookies, passwords, or a browser network/HAR export.</li></ol>
+<button id="copy" type="button">Copy test script</button>
+<span id="status" role="status" aria-live="polite"></span>
+<textarea id="script" readonly aria-label="Browser test script">(async () =&gt; {
+  &quot;use strict&quot;;
+  const config = {&quot;target&quot;: &quot;https://SOP-hia.replit.app&quot;, &quot;sha256&quot;: &quot;0fb0c4692cf529380827746e5fe812e42ea82b6f6fdf97a71d1093677d963183&quot;, &quot;chunkCount&quot;: 395, &quot;cases&quot;: [{&quot;id&quot;: &quot;trust-guaranty&quot;, &quot;question&quot;: &quot;A 7(a) applicant is owned by two revocable trusts, one at 12% and one at 8%. Under SOP 50 10 8.1 with Technical Policy Updates, do the trusts&#x27; ownership percentages aggregate for guaranty purposes, and who must sign?&quot;}, {&quot;id&quot;: &quot;robs-equity-injection&quot;, &quot;question&quot;: &quot;Do funds rolled from a 401(k) plan through a ROBS plan count toward the required equity injection, and what restrictions apply to distributions?&quot;}, {&quot;id&quot;: &quot;robs-guarantor&quot;, &quot;question&quot;: &quot;A retirement trust owns 60% of the Applicant through a ROBS structure. Who must sign the full unconditional guaranty?&quot;}, {&quot;id&quot;: &quot;compound-robs&quot;, &quot;question&quot;: &quot;A corporation is both the Borrower and plan sponsor, while an individual is the plan participant and trustee. Do the ROBS funds satisfy the equity injection, and which person or entity must provide the unconditional guaranty?&quot;}, {&quot;id&quot;: &quot;twenty-percent-guaranty&quot;, &quot;question&quot;: &quot;What guaranty is required from an individual who owns 20% or more of an Applicant?&quot;}, {&quot;id&quot;: &quot;trust-aggregate-below-threshold&quot;, &quot;question&quot;: &quot;A 7(a) applicant is owned by one trust at 19% and an individual at 81%. Does the trust have to guarantee the loan under the trust ownership threshold?&quot;}, {&quot;id&quot;: &quot;seller-retains-fifteen&quot;, &quot;question&quot;: &quot;A selling owner retains 15% direct ownership after a change of ownership. What guaranty must that seller provide?&quot;}, {&quot;id&quot;: &quot;seller-note&quot;, &quot;question&quot;: &quot;Can a seller-financed note be included in a change-of-ownership equity injection, and what timing rule applies if it is refinanced?&quot;}, {&quot;id&quot;: &quot;esop-injection&quot;, &quot;question&quot;: &quot;Are loans to an ESOP for purchasing a controlling interest subject to the equity-injection requirement?&quot;}, {&quot;id&quot;: &quot;compound-esop&quot;, &quot;question&quot;: &quot;An ESOP buys a controlling interest and the seller remains a partial owner. Is an equity injection required, and what guarantee must the seller provide?&quot;}, {&quot;id&quot;: &quot;partial-change-ownership&quot;, &quot;question&quot;: &quot;Can a new owner who gains 1% in a partial change of ownership be a Co-Borrower, and what separate guaranty rules apply to the remaining owners?&quot;}, {&quot;id&quot;: &quot;epc-oc-change&quot;, &quot;question&quot;: &quot;Can a 7(a) loan finance a partial change of ownership in the Operating Company of an EPC/OC structure?&quot;}, {&quot;id&quot;: &quot;robs-regulatory-review&quot;, &quot;question&quot;: &quot;Does SBA review a ROBS plan&#x27;s compliance with IRS, Treasury, and Department of Labor requirements?&quot;}, {&quot;id&quot;: &quot;unsupported-weather&quot;, &quot;question&quot;: &quot;What is the weather forecast for Chicago tomorrow?&quot;}, {&quot;id&quot;: &quot;unsupported-state-tax&quot;, &quot;question&quot;: &quot;What state income-tax filing should the owner make after closing the SBA loan?&quot;}, {&quot;id&quot;: &quot;threshold-arithmetic-spouse&quot;, &quot;question&quot;: &quot;A $2.4MM 7(a) change of ownership closes in November 2026. Post-sale ownership is buyer 45 percent, buyer&#x27;s spouse 19 percent, and a key employee 36 percent. Who must provide an unlimited full personal guaranty, and does the spouse&#x27;s interest change the analysis?&quot;}, {&quot;id&quot;: &quot;seller-note-standby&quot;, &quot;question&quot;: &quot;A December 2026 acquisition has a $300,000 seller note that the lender wants to count toward the 10 percent injection. Does it count, and what standby terms would be required?&quot;}, {&quot;id&quot;: &quot;unsupported-environmental-consultant&quot;, &quot;question&quot;: &quot;Does the SOP require a specific brand of environmental consultant for a Phase I?&quot;}, {&quot;id&quot;: &quot;multi-capacity-guarantors&quot;, &quot;question&quot;: &quot;A ROBS-funded borrower closes in January 2027 where a profit sharing plan holds 55 percent, the individual holds 45 percent directly, and the individual is sole participant and trustee. List every required guarantor and the capacity in which each signs.&quot;}, {&quot;id&quot;: &quot;startup-injection-computation&quot;, &quot;question&quot;: &quot;A $1.2MM 7(a) startup loan funds a new C corp in November 2026 with a total project cost of $1.45MM. State the minimum injection in dollars and the acceptable sources.&quot;}, {&quot;id&quot;: &quot;partial-change-one-unanswerable-half&quot;, &quot;question&quot;: &quot;For a February 2027 partial change of ownership, does the remaining owner have to guarantee, and what is the market rate for a seller note in this deal?&quot;}, {&quot;id&quot;: &quot;adversarial-collateral-entailment&quot;, &quot;question&quot;: &quot;What collateral is required when a 7(a) loan has a collateral shortfall?&quot;}, {&quot;id&quot;: &quot;effective-date-approval&quot;, &quot;question&quot;: &quot;A loan was approved September 20, 2026 and closes November 2026. Which SOP governs?&quot;}, {&quot;id&quot;: &quot;applicability-negative-full-change&quot;, &quot;question&quot;: &quot;An ordinary 7(a) full change of ownership is funded with a seller note. The seller exits and retains no ownership. Which guaranty and seller-note rules apply?&quot;}, {&quot;id&quot;: &quot;applicability-positive-esop-retained-seller&quot;, &quot;question&quot;: &quot;An ESOP buys a controlling interest and the seller retains 15 percent. What guaranty must the retained seller provide?&quot;}, {&quot;id&quot;: &quot;applicability-near-miss-partial-change&quot;, &quot;question&quot;: &quot;A partial change of ownership, not an ESOP, leaves the seller with 25 percent. Which guaranty provisions apply to the retained seller?&quot;}, {&quot;id&quot;: &quot;guarantor-enumeration-robs&quot;, &quot;question&quot;: &quot;A ROBS-funded 7(a) borrower closes in January 2027. The retirement plan holds 68 percent and the individual holds 32 percent directly; the individual is plan sponsor, sole plan participant, and trustee. List every required guarantor and the capacity in which each signs.&quot;}, {&quot;id&quot;: &quot;guarantor-enumeration-threshold&quot;, &quot;question&quot;: &quot;A $2.4MM 7(a) change of ownership closes in November 2026. Post-sale ownership is buyer 45 percent, buyer&#x27;s spouse 19 percent, and a key employee 36 percent. Enumerate every guarantor row and state the comparison to the 20 percent threshold.&quot;}, {&quot;id&quot;: &quot;guarantor-enumeration-unresolved&quot;, &quot;question&quot;: &quot;A 7(a) change of ownership has an entity owner at 17 percent, and the retrieved guaranty text does not state whether that entity must sign. List the guarantor rows and identify what remains unresolved.&quot;}, {&quot;id&quot;: &quot;lease-fact-retrieval-and-condition-context&quot;, &quot;question&quot;: &quot;A borrower operates from business premises under a month-to-month lease. Does that lease term by itself make the business ineligible, and what facts determine which lease rule applies?&quot;}, {&quot;id&quot;: &quot;affiliation-issue-retrieval&quot;, &quot;question&quot;: &quot;How are affiliated businesses treated when determining whether an applicant meets the SBA size standard?&quot;}, {&quot;id&quot;: &quot;use-of-proceeds-debt-refinancing&quot;, &quot;question&quot;: &quot;May SBA loan proceeds be used to refinance existing debt?&quot;}, {&quot;id&quot;: &quot;504-debenture-retrieval&quot;, &quot;question&quot;: &quot;What requirements apply to a 504 loan financed through a debenture?&quot;}]};
+  if (location.origin !== new URL(config.target).origin) {
+    throw new Error(&quot;Run this only in the Console on &quot; + config.target);
+  }
+  if (window.__sophiaProductionCapture?.running) {
+    throw new Error(&quot;A capture is already running. Wait for it or call its stop() method.&quot;);
+  }
+  const controller = new AbortController();
+  const control = {running: true, stop: () =&gt; controller.abort()};
+  window.__sophiaProductionCapture = control;
+  const report = {
+    format: &quot;sophia-browser-capture-v1&quot;,
+    recorded_at_utc: new Date().toISOString(),
+    target: config.target,
+    expected_source_sha256: config.sha256,
+    expected_chunk_count: config.chunkCount,
+    authenticated_user_confirmed: false,
+    corpus: null,
+    unauthenticated_check: null,
+    cases: [],
+    completed: false,
+    error: null,
+    note: &quot;COLLECTED means a response was captured, not that its policy claims passed audit.&quot;
+  };
+  const pause = ms =&gt; new Promise((resolve, reject) =&gt; {
+    if (controller.signal.aborted) return reject(new Error(&quot;Capture stopped.&quot;));
+    const onAbort = () =&gt; {
+      clearTimeout(timer);
+      reject(new Error(&quot;Capture stopped.&quot;));
+    };
+    const timer = setTimeout(() =&gt; {
+      controller.signal.removeEventListener(&quot;abort&quot;, onAbort);
+      resolve();
+    }, ms);
+    controller.signal.addEventListener(&quot;abort&quot;, onAbort, {once: true});
+  });
+  async function request(path, options = {}) {
+    if (controller.signal.aborted) throw new Error(&quot;Capture stopped.&quot;);
+    const requestController = new AbortController();
+    const abort = () =&gt; requestController.abort();
+    controller.signal.addEventListener(&quot;abort&quot;, abort, {once: true});
+    const timer = setTimeout(abort, 180000);
+    try {
+      const response = await fetch(new URL(path, location.origin), {
+        cache: &quot;no-store&quot;,
+        credentials: &quot;same-origin&quot;,
+        ...options,
+        signal: requestController.signal
+      });
+      const text = await response.text();
+      let body;
+      try { body = JSON.parse(text); }
+      catch { throw new Error(&quot;Non-JSON response (HTTP &quot; + response.status + &quot;).&quot;); }
+      return {
+        status: response.status,
+        body,
+        retryAfter: response.headers.get(&quot;Retry-After&quot;)
+      };
+    } finally {
+      clearTimeout(timer);
+      controller.signal.removeEventListener(&quot;abort&quot;, abort);
+    }
+  }
+  function download() {
+    const blob = new Blob([JSON.stringify(report, null, 2)], {type: &quot;application/json&quot;});
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement(&quot;a&quot;);
+    link.href = url;
+    link.download = &quot;sophia-production-capture-&quot; +
+      new Date().toISOString().replace(/[:.]/g, &quot;-&quot;) + &quot;.json&quot;;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setTimeout(() =&gt; URL.revokeObjectURL(url), 10000);
+  }
+  try {
+    console.info(&quot;SOPhia capture started. Keep this tab open. Responses require policy auditing.&quot;);
+    const health = await request(&quot;/api/healthz&quot;);
+    report.corpus = health.body;
+    if (health.status !== 200 || health.body.source_sha256 !== config.sha256 ||
+        health.body.chunk_count !== config.chunkCount || health.body.status !== &quot;ok&quot;) {
+      throw new Error(&quot;Corpus gate failed. No regression queries were sent.&quot;);
+    }
+    const auth = await request(&quot;/api/auth/user&quot;);
+    // Save only a boolean, never identity data or session information.
+    report.authenticated_user_confirmed = auth.status === 200 &amp;&amp; Boolean(auth.body.user);
+    if (!report.authenticated_user_confirmed) {
+      throw new Error(&quot;Sign in with an authorized account, then rerun. No regression queries were sent.&quot;);
+    }
+    const unsigned = await request(&quot;/api/sop/query&quot;, {
+      method: &quot;POST&quot;, credentials: &quot;omit&quot;,
+      headers: {&quot;Content-Type&quot;: &quot;application/json&quot;},
+      body: JSON.stringify({question: &quot;What guaranty requirements apply?&quot;})
+    });
+    report.unauthenticated_check = {
+      expected_status: 401,
+      actual_status: unsigned.status,
+      passed: unsigned.status === 401
+    };
+    if (unsigned.status !== 401) {
+      throw new Error(&quot;Unsigned access was not rejected with 401. Stopping for review.&quot;);
+    }
+    for (const [index, test] of config.cases.entries()) {
+      await pause(2500);
+      const started = performance.now();
+      const item = {id: test.id, question: test.question, status: &quot;ERROR&quot;};
+      report.cases.push(item);
+      try {
+        const options = {
+          method: &quot;POST&quot;,
+          headers: {&quot;Content-Type&quot;: &quot;application/json&quot;},
+          body: JSON.stringify({question: test.question})
+        };
+        let response = await request(&quot;/api/sop/query&quot;, options);
+        if (response.status === 429) {
+          const seconds = Number(response.retryAfter);
+          await pause((Number.isFinite(seconds) ? Math.min(300, Math.max(3, seconds)) : 60) * 1000);
+          response = await request(&quot;/api/sop/query&quot;, options);
+        }
+        item.http_status = response.status;
+        item.response = response.body;
+        item.elapsed_ms = Math.round(performance.now() - started);
+        if (response.status !== 200) {
+          throw new Error(&quot;HTTP &quot; + response.status + &quot; for &quot; + test.id);
+        }
+        item.status = &quot;COLLECTED&quot;;
+        console.info(&quot;SOPhia [&quot; + (index + 1) + &quot;/&quot; + config.cases.length + &quot;] &quot; +
+          test.id + &quot;: collected&quot;);
+      } catch (error) {
+        item.error = String(error.message || error);
+        throw error;
+      }
+    }
+    report.completed = true;
+    console.info(&quot;SOPhia responses collected. Upload the downloaded JSON for policy/citation audit.&quot;);
+  } catch (error) {
+    report.error = String(error.message || error);
+    console.error(&quot;SOPhia capture stopped:&quot;, report.error);
+  } finally {
+    const collectedIds = new Set(report.cases.map(item =&gt; item.id));
+    for (const test of config.cases) {
+      if (!collectedIds.has(test.id)) {
+        report.cases.push({id: test.id, question: test.question, status: &quot;NOT_RUN&quot;});
+      }
+    }
+    report.finished_at_utc = new Date().toISOString();
+    control.running = false;
+    control.download = download;
+    download();
+    console.info(&quot;If the download was blocked, run window.__sophiaProductionCapture.download()&quot;);
+  }
+})();</textarea>
+<p>To stop safely, run <code>window.__sophiaProductionCapture.stop()</code>.
+If the download was blocked, run <code>window.__sophiaProductionCapture.download()</code>
+after the capture ends.</p>
+<h2>Separate allowlist 403 check</h2>
+<p>This needs a genuine authenticated account that is <strong>not</strong> on SOPhia's
+allowlist. Use a separate private browser window so your permitted session stays intact.
+Follow the normal SOPhia login flow with that account. The callback should return
+HTTP <strong>403</strong> and <code>This account is not authorized.</code></p>
+<p>Record the HTTP status and denial message only. A screenshot of those two values is
+enough; hide account details and the callback URL's query string. Do not share credentials,
+full network exports, or authorization codes. An unsigned <strong>401</strong> is not
+evidence of this 403 test. If no such account is available, leave this check blocked.</p>
+</main><script>
+document.getElementById("copy").addEventListener("click",async()=>{
+ const field=document.getElementById("script");
+ const status=document.getElementById("status");
+ try{await navigator.clipboard.writeText(field.value);status.textContent=" Copied.";}
+ catch{field.focus();field.select();status.textContent=" Selected. Press Ctrl+C or Cmd+C to copy.";}
+});
+</script></body></html>
