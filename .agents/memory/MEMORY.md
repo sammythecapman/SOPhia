@@ -9,3 +9,4 @@
 - [Shared rate limiting](shared-rate-limiting.md) — process-local counters are insufficient when production runs multiple workers.
 - [Replit production data publish](replit-production-data-publish.md) — production data requires the explicit Publish option to copy development data; schema sync alone is insufficient.
 - [SOP fact-facet retrieval](sop-fact-facet-retrieval.md) — retrieve independent material facts and use OR lexical matching when broad semantic queries miss issue-specific provisions.
+- [GitHub sync preservation](github-sync-preservation.md) — preserve successful GitHub syncing while changing SOPhia or its environment.
