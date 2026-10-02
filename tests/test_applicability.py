@@ -1,8 +1,10 @@
+import json
 import os
 import sys
 import unittest
 from contextlib import contextmanager
 from pathlib import Path
+from types import SimpleNamespace
 
 
 API_SERVER = Path(__file__).resolve().parents[1] / "artifacts" / "api-server"
@@ -63,6 +65,7 @@ from app import (  # noqa: E402
     augment_extracted_party_capacities,
     build_lexical_search_query,
     build_retrieval_searches,
+    derive_policy_issue,
     ensure_seller_note_subquestion,
     candidate_admitted,
     conclusion_has_cited_issue_focus,
@@ -390,6 +393,109 @@ class ApplicabilityRegressionTests(unittest.TestCase):
                 "Seller financing; Stand-by agreements.",
             )
         )
+
+    def test_policy_issue_fallback_rechecks_seller_note_focus(self):
+        working_capital_source = RetrievedSource(
+            db_id=1,
+            source_id=1,
+            sop_version="SOP 50 10 8.1",
+            effective_date="2026-10-01",
+            page_number=373,
+            section_ref="Appendices > Appendix 15 > Equity Requirements",
+            chunk_text=(
+                "When 50 percent or more of the loan proceeds will be used for "
+                "working capital, the Lender must explain the need. Seller financing "
+                "and standby agreements must be documented."
+            ),
+            similarity=0.9,
+        )
+        seller_debt_source = RetrievedSource(
+            db_id=2,
+            source_id=2,
+            sop_version="SOP 50 10 8.1",
+            effective_date="2026-10-01",
+            page_number=373,
+            section_ref="Appendices > Appendix 15 > Equity Requirements",
+            chunk_text=(
+                "Seller debt that is subordinated to the Lender and on full standby "
+                "may be considered as equity. Seller debt structured in conjunction "
+                "with a change of ownership transaction is eligible to be refinanced "
+                "after it has been in place and current for 36 months."
+            ),
+            similarity=0.8,
+        )
+        interest_rate_source = RetrievedSource(
+            db_id=3,
+            source_id=3,
+            sop_version="SOP 50 10 8.1",
+            effective_date="2026-10-01",
+            page_number=397,
+            section_ref="Appendix 18 > General Policy on Interest Rates",
+            chunk_text=(
+                "The maximum allowable fixed interest rate will be the Prime rate."
+            ),
+            similarity=0.7,
+        )
+        client = SimpleNamespace(
+            chat=SimpleNamespace(
+                completions=SimpleNamespace(
+                    create=lambda **_kwargs: SimpleNamespace(
+                        choices=[
+                            SimpleNamespace(
+                                message=SimpleNamespace(
+                                    content=json.dumps(
+                                        {
+                                            "issue_text": (
+                                                "Working capital requirements apply."
+                                            ),
+                                            "clauses": [
+                                                {
+                                                    "source_id": 1,
+                                                    "quote": (
+                                                        "When 50 percent or more of "
+                                                        "the loan proceeds will be "
+                                                        "used for working capital, "
+                                                        "the Lender must explain "
+                                                        "the need."
+                                                    ),
+                                                }
+                                            ],
+                                        }
+                                    )
+                                )
+                            )
+                        ]
+                    )
+                )
+            )
+        )
+        sources = [
+            working_capital_source,
+            seller_debt_source,
+            interest_rate_source,
+        ]
+
+        seller_note_issue = derive_policy_issue(
+            client,
+            "The seller exits and retains no ownership.",
+            "What seller-note rules apply when the seller exits and retains no ownership?",
+            sources,
+        )
+
+        self.assertFalse(seller_note_issue["unresolved"])
+        self.assertEqual(seller_note_issue["source_ids"], [2])
+        self.assertIn("Seller debt structured", seller_note_issue["text"])
+        self.assertNotIn("working capital", seller_note_issue["text"].casefold())
+
+        market_rate_issue = derive_policy_issue(
+            client,
+            "A partial change of ownership uses a seller note.",
+            "What is the market rate for a seller note?",
+            sources,
+        )
+
+        self.assertTrue(market_rate_issue["unresolved"])
+        self.assertEqual(market_rate_issue["clauses"], [])
 
     def test_unstated_split_trigger_blocks_unqualified_claims(self):
         section = "Section A > Occupancy and Leasing Requirements"

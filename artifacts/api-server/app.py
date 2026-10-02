@@ -1171,8 +1171,8 @@ def derive_policy_issue(
     except Exception:
         app.logger.exception("Source-derived policy issue generation failed")
 
-    # Keep the fallback source-derived and generic. It is only a retrieval label;
-    # the relevance audit still decides whether any proposition answers it.
+    # Keep the fallback source-derived, but apply the same issue-focus check as
+    # model-derived clauses so a neighboring provision cannot become the issue.
     seed_terms = _normalized_policy_terms(retrieval_seed)
     ranked: list[tuple[int, float, RetrievedSource, str]] = []
     for source in sources:
@@ -1180,10 +1180,16 @@ def derive_policy_issue(
             overlap = len(seed_terms.intersection(_normalized_policy_terms(clause)))
             ranked.append((overlap, source.similarity, source, clause))
     ranked.sort(key=lambda item: (item[0], item[1]), reverse=True)
-    if ranked and ranked[0][0] > 0:
-        _, _, source, clause = ranked[0]
+    for overlap, _, source, clause in ranked:
+        if overlap <= 0:
+            break
+        issue_text = f"Policy issue: {clause}"
+        if not conclusion_has_cited_issue_focus(
+            retrieval_seed, issue_text, clause
+        ):
+            continue
         return {
-            "text": f"Policy issue: {clause}",
+            "text": issue_text,
             "source_ids": [source.source_id],
             "clauses": [{"source_id": source.source_id, "quote": clause}],
             "unresolved": False,
@@ -3136,7 +3142,13 @@ def query_sop():
                     unresolved_reason = (
                         "No admitted proposition directly answers this sub-question."
                     )
-                    support_note = f"{NOT_ESTABLISHED} {unresolved_reason}"
+                    unresolved_subject = (
+                        item.get("requested_question") or item["question"]
+                    )
+                    support_note = (
+                        f"{NOT_ESTABLISHED} The retrieved SOP provisions do not "
+                        f"establish an answer to: {unresolved_subject}"
+                    )
                     answer = support_note
                 no_provision = False
             elif item["sources_available"]:
