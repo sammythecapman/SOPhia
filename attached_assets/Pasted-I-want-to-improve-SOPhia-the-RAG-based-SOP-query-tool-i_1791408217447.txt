@@ -1,0 +1,52 @@
+I want to improve SOPhia, the RAG-based SOP query tool in this project. SOPhia answers SBA lending questions grounded in SOP 50 10 8.1 (effective October 1, 2026). It chunks and embeds the SOP using pgvector on Postgres, retrieves relevant sections per query, reranks or filters them, and has Claude write a grounded answer with citations. The answer UI currently shows: an Assumption line, a Bottom Line, Provisions to Read, an Applied Conclusion with cited passages marked "Supports this conclusion," and a collapsed "Retrieved evidence reviewed and rejected" panel.
+
+Before changing anything, read through the SOPhia code (ingestion/chunking, embedding, retrieval, reranking/filtering, the answer-generation prompt, and the frontend answer components) and give me a short summary of how the pipeline currently works and your plan for each change below. Then implement. Keep changes scoped to SOPhia. Do not touch the Azure extraction pipeline, SharePoint integration, or anything outside the SOPhia feature.
+
+THE FAILURE CASE
+
+Test question:
+"A lender proposes to include a covenant in the loan agreement requiring the Borrower to maintain its deposit accounts with the lender, with the interest rate on the loan increasing by 1.00% if the Borrower fails to do so. Under SBA Loan Program Requirements, is such a provision permissible, or would the rate increase constitute a prohibited Preference (as a compensating balance arrangement) or an impermissible default rate?"
+
+What SOPhia did:
+- Bottom line was correct (not permissible), but it only analyzed the default rate issue. It never addressed whether the deposit covenant is a prohibited Preference, even though the question asked that explicitly. The Preference provisions were probably among the 6 retrieved-and-rejected chunks, or were never retrieved.
+- It assumed a Standard 7(a) loan, then cited an Export Express program-specific passage (Appendix 18 > ... > Program-Specific Requirements > Export Express Loans, p. 410) as supporting authority. That is inconsistent with its own assumption.
+- It adopted the question's "default rate" label instead of identifying the governing rule by substance (a covenant-triggered rate increase is an unauthorized change to the note rate, whether or not it is called a default rate).
+- The Applied Conclusion just repeated the Bottom Line. It did not quote the operative language or explain how the cited text applies to the facts.
+
+REQUIRED CHANGES
+
+1. Issue decomposition before retrieval
+- Add a step that breaks the user's question into distinct legal sub-issues (for the test question: (a) is the deposit account covenant a Preference / compensating balance arrangement; (b) is the 1.00% rate step-up permissible under the interest rate rules, including any default rate rule).
+- Run retrieval separately for each sub-issue, with query expansion using SBA terminology (e.g., for (a): "Preference," "compensating balance," "preferred position compared to SBA," "13 CFR 120.10").
+- Merge and dedupe the results before reranking.
+
+2. Every sub-issue must be answered
+- The answer must address each sub-issue in its own labeled section with its own conclusion and citations.
+- If no retrieved text supports a conclusion on a sub-issue, say so explicitly ("Not addressed by retrieved provisions") instead of silently skipping it. A visible gap is acceptable; a silent omission is not.
+- The Bottom Line should synthesize the sub-issue conclusions.
+
+3. Program-specific filtering
+- At ingestion, tag each chunk with program metadata derived from its heading path (e.g., Standard 7(a), 7(a) Small, SBA Express, Export Express, International Trade, 504, etc.; "general" if not program-specific). Re-index if needed.
+- Once the Assumption sets a loan type, exclude or heavily down-rank chunks tagged for other programs unless the user's question names that program.
+- Never allow a chunk tagged for a different program to appear as "Supports this conclusion."
+
+4. Rejection reasons
+- When the reranker or filter rejects a retrieved chunk, record a one-line reason (e.g., "different loan program," "off-topic," "duplicative of higher-ranked chunk").
+- Show those reasons in the "Retrieved evidence reviewed and rejected" panel next to each rejected provision, and log them for debugging.
+
+5. Substance over labels
+- Add an instruction to the answer-generation prompt: identify the governing rule by what the provision actually does, not by the label the user uses. If the user's characterization is incomplete or arguably wrong, say so and name the better framing.
+
+6. Real Applied Conclusion
+- For each cited passage, the Applied Conclusion must include a short quote (one sentence or less) of the operative language and one to three sentences explaining how it applies to the facts.
+- Add a verification check that each quote appears verbatim in the cited chunk text. If it does not, drop the quote and flag the citation as unverified instead of displaying it as support.
+
+7. Regression evals
+- Create an eval file with the test question above and these expected behaviors: addresses both the Preference sub-issue and the interest rate sub-issue; cites no Export Express or other non-Standard-7(a) program chunks as support; Applied Conclusion contains verified quotes; rejected panel shows reasons.
+- Add a simple script or command I can run to execute the evals and print pass/fail per check.
+- Structure it so I can add more test questions later.
+
+DELIVERABLES
+- The pipeline summary and plan (before implementing).
+- The implemented changes.
+- A short summary of what changed, which files were touched, whether re-indexing was required, and the eval results for the test question after your changes.
