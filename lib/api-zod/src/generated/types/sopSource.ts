@@ -24,5 +24,10 @@ export interface SopSource {
   applicability_status: SopSourceApplicabilityStatus;
   /** @nullable */
   applicability_reason: string | null;
+  /** @nullable */
+  rejection_reason?: string | null;
+  /** @nullable */
+  application?: string | null;
+  program_scope?: string[];
   verified: boolean;
 }

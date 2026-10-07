@@ -15,6 +15,8 @@ import type { SopSubanswerSynthesizerTelemetry } from './sopSubanswerSynthesizer
 export interface SopSubanswer {
   subquestion_id: string;
   question: string;
+  /** @nullable */
+  requested_question?: string | null;
   answer: string;
   applied_conclusion: SopProposition | null;
   no_provision: boolean;

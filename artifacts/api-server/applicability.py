@@ -48,11 +48,13 @@ DIMENSION_LABELS = {
         "selling_owner_under_20": "a selling owner below 20% ownership",
     },
     "program_scopes": {
+        "general": "general SBA requirements",
         "esop": "ESOP authority",
         "504": "504 authority",
         "7a": "7(a) authority",
     },
     "product_lines": {
+        "export_express": "Export Express",
         "standard_7a": "Standard 7(a)",
         "7a_small": "7(a) Small Loans",
         "sba_express": "SBA Express",
@@ -274,6 +276,8 @@ def classify_text(text: str, section_ref: str = "") -> dict[str, list[str]]:
     # not only by the leaf heading. A CAPLines leaf such as "Underwriting"
     # must retain the CAPLines scope from its parent chapter.
     product_source = section_lower if section_ref else lower
+    if re.search(r"export\s+express", product_source):
+        _add(tags["product_lines"], "export_express")
     if re.search(r"sba\s+express", product_source):
         _add(tags["product_lines"], "sba_express")
     if re.search(r"7\s*\(\s*a\s*\)\s+small|7a\s+small", product_source):
@@ -301,10 +305,24 @@ def classify_text(text: str, section_ref: str = "") -> dict[str, list[str]]:
         and not tags["product_lines"]
     ):
         _add(tags["product_lines"], "standard_7a")
-    if section_ref and re.search(r"standard\s+7\s*\(\s*a\s*\)", product_source):
+    if re.search(r"standard\s+7\s*\(\s*a\s*\)", product_source):
         _add(tags["product_lines"], "standard_7a")
     if appendix_15 and not is_esop:
         _add(tags["product_lines"], "standard_7a")
+
+    # Scope follows the heading ancestry, not incidental cross-references in
+    # the body. Empty product_lines means program-general; it is not an
+    # affirmative Standard 7(a) exception.
+    if section_ref and not is_esop:
+        if "504" in tags["product_lines"]:
+            tags["program_scopes"] = ["504"]
+        elif tags["product_lines"] or re.search(
+            r"appendix\s+\d+:\s*7\s*\(\s*a\s*\)|section\s+b\.\s*7\s*\(\s*a\s*\)",
+            section_lower,
+        ):
+            tags["program_scopes"] = ["7a"]
+        elif not tags["program_scopes"]:
+            tags["program_scopes"] = ["general"]
 
     if re.search(
         r"7\s*\(\s*a\s*\)\s+small|7a\s+small|small\s+(?:loan|loans)|"
@@ -340,7 +358,12 @@ def classify_question(text: str) -> dict[str, list[str]]:
             "thousand": 1_000,
         }.get(amount_match.group(2) or "", 1)
         amount = number * multiplier
-    if re.search(r"sba\s+express", lower):
+    if len(products) > 1:
+        tags["loan_size_bands"] = []
+        return tags
+    if re.search(r"export\s+express", lower):
+        products[:] = ["export_express"]
+    elif re.search(r"sba\s+express", lower):
         products[:] = ["sba_express"]
     elif re.search(r"7\s*\(\s*a\s*\)\s+small|7a\s+small", lower):
         products[:] = ["7a_small"]
@@ -386,6 +409,9 @@ def applicability_dimension_conflicts(
 ) -> bool:
     """Return whether two populated tag sets affirmatively contradict each other."""
 
+    if dimension == "program_scopes":
+        source_values = source_values - {"general"}
+        fact_values = fact_values - {"general"}
     if not source_values or not fact_values:
         return False
     if dimension == "transaction_types" and (

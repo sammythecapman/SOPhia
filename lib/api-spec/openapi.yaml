@@ -143,6 +143,14 @@ components:
           enum: [applicable, not_applicable]
         applicability_reason:
           type: [string, "null"]
+        rejection_reason:
+          type: [string, "null"]
+        application:
+          type: [string, "null"]
+        program_scope:
+          type: array
+          items:
+            type: string
         verified:
           type: boolean
       required:
@@ -213,6 +221,8 @@ components:
           type: string
         question:
           type: string
+        requested_question:
+          type: [string, "null"]
         answer:
           type: string
         applied_conclusion:
@@ -223,7 +233,7 @@ components:
           type: boolean
         support_status:
           type: string
-          enum: [supported, not_established, not_applicable, no_responsive_provision, retrieval_empty]
+          enum: [supported, not_established, not_applicable, no_responsive_provision, retrieval_empty, unresolved]
         support_note:
           type: [string, "null"]
         searched_terms:

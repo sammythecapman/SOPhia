@@ -78,6 +78,8 @@ from app import (  # noqa: E402
     select_context_sources,
     unresolved_adjacent_trigger,
     validate_candidate_citations,
+    build_citation,
+    find_verbatim_quote,
 )
 
 
@@ -93,6 +95,73 @@ def empty_facts():
 
 
 class ApplicabilityRegressionTests(unittest.TestCase):
+    def test_approximate_quote_is_not_verified(self):
+        source = "The Lender must not require a compensating balance."
+        self.assertIsNone(find_verbatim_quote(
+            "The Lender cannot require a compensating balance.", source
+        ))
+        self.assertEqual(find_verbatim_quote(source, source), source)
+
+    def test_invalid_applied_quote_is_flagged_and_dropped(self):
+        source = RetrievedSource(
+            db_id=10, source_id=10, sop_version="SOP 50 10 8.1",
+            effective_date="2026-10-01", page_number=299,
+            section_ref="Appendices > Definitions",
+            chunk_text="The Lender must not require a compensating balance.",
+            similarity=1.0,
+        )
+        candidate = {
+            "kind": "conclusion", "text": "The proposed covenant is prohibited.",
+            "citations": [{
+                "source_id": 10, "quote": "The Lender cannot require a compensating balance.",
+                "application": "The proposed deposit covenant requires this arrangement.",
+            }],
+            "applicable_source_ids": [10],
+            "gate_by_source_id": {10: {"admitted": True}},
+        }
+        self.assertEqual(validate_candidate_citations([candidate], {10: source}), [])
+        rejected = candidate["rejected_citations"][0]
+        self.assertEqual(rejected["quote"], "")
+        self.assertFalse(rejected["verified"])
+        self.assertFalse(rejected["supports_conclusion"])
+        self.assertIn("not verbatim", rejected["rejection_reason"])
+
+    def test_citation_builder_cannot_label_unverified_text_as_support(self):
+        source = RetrievedSource(
+            db_id=10, source_id=10, sop_version="SOP 50 10 8.1",
+            effective_date="2026-10-01", page_number=299,
+            section_ref="Appendices > Definitions", chunk_text="Exact language.",
+            similarity=1.0,
+        )
+        citation = build_citation(source, "Approximate language.", True)
+        self.assertFalse(citation["verified"])
+        self.assertFalse(citation["supports_conclusion"])
+
+    def test_trailing_rate_heading_is_not_an_adjacent_conditional_trigger(self):
+        common = {
+            "sop_version": "SOP 50 10 8.1", "effective_date": "2026-10-01",
+            "page_number": 397, "section_ref": "Appendix 18 > General Policy on Interest Rates",
+            "similarity": 1.0,
+        }
+        previous = RetrievedSource(
+            db_id=40, source_id=1,
+            chunk_text="If a variable rate changes, the agreed method governs.\n"
+            "Post-Approval Changes to the Interest Rate:", **common,
+        )
+        operative = RetrievedSource(
+            db_id=41, source_id=2,
+            chunk_text="Default interest rates are not permitted.", **common,
+        )
+        candidate = {
+            "text": "The proposed default-rate increase is not permitted.",
+            "requested_question": "Is the covenant-triggered rate increase permitted?",
+            "applicable_source_ids": [1, 2],
+            "citations": [{"source_id": 2, "quote": operative.chunk_text}],
+        }
+        self.assertIsNone(unresolved_adjacent_trigger(
+            candidate, "A covenant-triggered interest-rate increase.", {1: previous, 2: operative}
+        ))
+
     def test_broad_change_of_ownership_provision_applies_to_partial_change(self):
         source = classify_text(
             "Seller debt may be considered as equity when it is on full standby.",

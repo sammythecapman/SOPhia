@@ -15,4 +15,5 @@ export const SopSubanswerSupportStatus = {
   not_applicable: 'not_applicable',
   no_responsive_provision: 'no_responsive_provision',
   retrieval_empty: 'retrieval_empty',
+  unresolved: 'unresolved',
 } as const;

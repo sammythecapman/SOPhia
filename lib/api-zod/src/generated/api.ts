@@ -57,6 +57,7 @@ export const QuerySopResponse = zod.object({
   "subanswers": zod.array(zod.object({
   "subquestion_id": zod.string(),
   "question": zod.string(),
+  "requested_question": zod.string().nullish(),
   "answer": zod.string(),
   "applied_conclusion": zod.union([zod.object({
   "text": zod.string(),
@@ -75,11 +76,14 @@ export const QuerySopResponse = zod.object({
   "supports_conclusion": zod.boolean(),
   "applicability_status": zod.enum(['applicable', 'not_applicable']),
   "applicability_reason": zod.string().nullable(),
+  "rejection_reason": zod.string().nullish(),
+  "application": zod.string().nullish(),
+  "program_scope": zod.array(zod.string()).optional(),
   "verified": zod.boolean()
 }))
 }),zod.null()]),
   "no_provision": zod.boolean(),
-  "support_status": zod.enum(['supported', 'not_established', 'not_applicable', 'no_responsive_provision', 'retrieval_empty']),
+  "support_status": zod.enum(['supported', 'not_established', 'not_applicable', 'no_responsive_provision', 'retrieval_empty', 'unresolved']),
   "support_note": zod.string().nullable(),
   "searched_terms": zod.array(zod.string()),
   "rejected_citations": zod.array(zod.object({
@@ -96,6 +100,9 @@ export const QuerySopResponse = zod.object({
   "supports_conclusion": zod.boolean(),
   "applicability_status": zod.enum(['applicable', 'not_applicable']),
   "applicability_reason": zod.string().nullable(),
+  "rejection_reason": zod.string().nullish(),
+  "application": zod.string().nullish(),
+  "program_scope": zod.array(zod.string()).optional(),
   "verified": zod.boolean()
 })),
   "propositions": zod.array(zod.object({
@@ -115,6 +122,9 @@ export const QuerySopResponse = zod.object({
   "supports_conclusion": zod.boolean(),
   "applicability_status": zod.enum(['applicable', 'not_applicable']),
   "applicability_reason": zod.string().nullable(),
+  "rejection_reason": zod.string().nullish(),
+  "application": zod.string().nullish(),
+  "program_scope": zod.array(zod.string()).optional(),
   "verified": zod.boolean()
 }))
 })),
@@ -141,6 +151,9 @@ export const QuerySopResponse = zod.object({
   "supports_conclusion": zod.boolean(),
   "applicability_status": zod.enum(['applicable', 'not_applicable']),
   "applicability_reason": zod.string().nullable(),
+  "rejection_reason": zod.string().nullish(),
+  "application": zod.string().nullish(),
+  "program_scope": zod.array(zod.string()).optional(),
   "verified": zod.boolean()
 }))
 })),
@@ -164,6 +177,9 @@ export const QuerySopResponse = zod.object({
   "supports_conclusion": zod.boolean(),
   "applicability_status": zod.enum(['applicable', 'not_applicable']),
   "applicability_reason": zod.string().nullable(),
+  "rejection_reason": zod.string().nullish(),
+  "application": zod.string().nullish(),
+  "program_scope": zod.array(zod.string()).optional(),
   "verified": zod.boolean()
 }))
 })),
@@ -181,6 +197,9 @@ export const QuerySopResponse = zod.object({
   "supports_conclusion": zod.boolean(),
   "applicability_status": zod.enum(['applicable', 'not_applicable']),
   "applicability_reason": zod.string().nullable(),
+  "rejection_reason": zod.string().nullish(),
+  "application": zod.string().nullish(),
+  "program_scope": zod.array(zod.string()).optional(),
   "verified": zod.boolean()
 })).optional(),
   "provisions_to_read": zod.array(zod.object({
@@ -197,6 +216,9 @@ export const QuerySopResponse = zod.object({
   "supports_conclusion": zod.boolean(),
   "applicability_status": zod.enum(['applicable', 'not_applicable']),
   "applicability_reason": zod.string().nullable(),
+  "rejection_reason": zod.string().nullish(),
+  "application": zod.string().nullish(),
+  "program_scope": zod.array(zod.string()).optional(),
   "verified": zod.boolean()
 })).optional()
 })

@@ -171,7 +171,7 @@ function CitationCard({ source }: { source: SopSource }) {
                 <AlertTriangle className="h-3 w-3" />
                 Not applicable
               </Badge>
-            ) : source.supports_conclusion ? (
+            ) : source.supports_conclusion && source.verified && source.quote_located ? (
               <Badge
                 variant="outline"
                 className="gap-1 border-primary/30 bg-primary/5 text-[10px] font-semibold uppercase tracking-wider text-primary"
@@ -251,7 +251,7 @@ function RejectedEvidence({ sources }: { sources: SopSource[] }) {
             <div className="font-semibold">
               {source.section_ref} · {source.page_number ? `Page ${source.page_number}` : "Page not recorded"}
             </div>
-            {source.applicability_reason && <div>{source.applicability_reason}</div>}
+            <div>{source.rejection_reason ?? source.applicability_reason ?? "Support was not established for this issue."}</div>
           </div>
         ))}
       </div>
@@ -273,9 +273,22 @@ function Proposition({
         {proposition.citations.map((source, index) => {
           const alreadyShown = seenCitationIds.has(source.source_id);
           seenCitationIds.add(source.source_id);
-          return alreadyShown ? (
+          return (
+            <div key={`${source.source_id}-${index}`} className="space-y-3">
+              {source.application && (
+                <div className="space-y-2 border-l-2 border-primary/30 pl-4">
+                  {source.verified && source.quote_located && source.quote ? (
+                    <blockquote className="font-serif text-sm leading-6 text-foreground/80">
+                      “{source.quote}”
+                    </blockquote>
+                  ) : (
+                    <p className="text-xs text-amber-900">Unverified quote — not displayed as supporting authority.</p>
+                  )}
+                  <p className="text-sm leading-6 text-foreground/85">{source.application}</p>
+                </div>
+              )}
+              {alreadyShown ? (
             <div
-              key={`${source.source_id}-${index}`}
               className="rounded-md border border-border/50 bg-secondary/10 px-4 py-3 text-xs text-muted-foreground"
             >
                         <a className="hover:underline" href={`#citation-${source.source_id}`}>
@@ -285,6 +298,8 @@ function Proposition({
             </div>
           ) : (
             <CitationCard key={`${source.source_id}-${index}`} source={source} />
+          )}
+            </div>
           );
         })}
       </div>
@@ -632,7 +647,7 @@ export default function Home() {
                         <section key={`${subanswer.question}-${index}`} className="space-y-4">
                           {result.subanswers.length > 1 && (
                             <h4 className="font-sans text-sm font-semibold uppercase tracking-wider text-muted-foreground">
-                              {subanswer.question}
+                              {subanswer.requested_question ?? subanswer.question}
                             </h4>
                           )}
                           {subanswer.support_status === "not_established" && (
@@ -656,10 +671,11 @@ export default function Home() {
                             </Alert>
                           )}
                           {(subanswer.support_status === "no_responsive_provision" ||
+                            subanswer.support_status === "unresolved" ||
                             subanswer.support_status === "retrieval_empty") && (
                             <Alert className="border-amber-300 bg-amber-50 text-amber-950">
                               <AlertTriangle className="h-4 w-4" />
-                              <AlertTitle>Retrieval found no responsive provision</AlertTitle>
+                              <AlertTitle>Not addressed by retrieved provisions</AlertTitle>
                               <AlertDescription>{subanswer.support_note}</AlertDescription>
                             </Alert>
                           )}

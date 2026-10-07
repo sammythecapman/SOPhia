@@ -49,6 +49,11 @@ export interface SopSource {
   applicability_status: SopSourceApplicabilityStatus;
   /** @nullable */
   applicability_reason: string | null;
+  /** @nullable */
+  rejection_reason?: string | null;
+  /** @nullable */
+  application?: string | null;
+  program_scope?: string[];
   verified: boolean;
 }
 
@@ -90,6 +95,7 @@ export const SopSubanswerSupportStatus = {
   not_applicable: 'not_applicable',
   no_responsive_provision: 'no_responsive_provision',
   retrieval_empty: 'retrieval_empty',
+  unresolved: 'unresolved',
 } as const;
 
 export type SopSubanswerGateTelemetryItem = { [key: string]: unknown };
@@ -99,6 +105,8 @@ export type SopSubanswerSynthesizerTelemetry = { [key: string]: unknown };
 export interface SopSubanswer {
   subquestion_id: string;
   question: string;
+  /** @nullable */
+  requested_question?: string | null;
   answer: string;
   applied_conclusion: SopProposition | null;
   no_provision: boolean;

@@ -1,0 +1,15 @@
+{
+  "cases": [
+    {
+      "id": "deposit-covenant-rate-step-up",
+      "question": "A lender proposes to include a covenant in the loan agreement requiring the Borrower to maintain its deposit accounts with the lender, with the interest rate on the loan increasing by 1.00% if the Borrower fails to do so. Under SBA Loan Program Requirements, is such a provision permissible, or would the rate increase constitute a prohibited Preference (as a compensating balance arrangement) or an impermissible default rate?",
+      "issues": [
+        {"label": "Preference", "pattern": "preference|compensating balance", "operative_quote_pattern": "preference|compensating balance|preferred position"},
+        {"label": "Interest-rate rules", "pattern": "interest.rate|note.rate", "operative_quote_pattern": "default interest rates|spread.*(?:chang|adjust)|(?:note|interest).{0,80}(?:chang|adjust)|same spread"}
+      ],
+      "allowed_support_programs": ["general", "7a", "standard_7a"],
+      "required_expansions": ["compensating balance", "preferred position compared to SBA", "13 CFR 120.10"],
+      "substance_pattern": "note.rate|spread|change.{0,35}(?:rate|interest)|(?:rate|interest).{0,35}change"
+    }
+  ]
+}

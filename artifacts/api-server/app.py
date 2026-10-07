@@ -22,6 +22,17 @@ from applicability import (
 from auth import configure_auth, current_user, require_auth
 from db import connection
 from source_metadata import canonicalize_source_url
+from sophia_issues import (
+    applied_evidence_error,
+    conclusion_scope_error,
+    expanded_search_terms,
+    grounded_covenant_conclusion,
+    preserve_compound_issues,
+    quote_options,
+    resolve_applied_quotes,
+    sentences,
+    synthesize_bottom_line,
+)
 
 app = Flask(__name__)
 configure_auth(app)
@@ -179,6 +190,8 @@ def source_tags(source: RetrievedSource) -> dict[str, list[str]]:
     # scope, not an unknown universal provision.
     inferred = classify_text(source.chunk_text, source.section_ref)
     for dimension in APPLICABILITY_DIMENSIONS:
+        if dimension in {"program_scopes", "product_lines"} and inferred[dimension] and inferred[dimension] != ["general"]:
+            tags[dimension] = inferred[dimension]
         if not tags[dimension] and inferred[dimension]:
             tags[dimension] = inferred[dimension]
     return tags
@@ -535,7 +548,7 @@ def lexical_retrieval_seeds(
 
 
 def build_search_terms(text: str) -> list[str]:
-    terms: list[str] = []
+    terms: list[str] = expanded_search_terms(text)
     lower = text.casefold()
     if re.search(
         r"seller[-\s]?financ|seller[-\s]?note|standby|subordinated debt",
@@ -2445,7 +2458,7 @@ def query_sop():
 
     try:
         client = OpenAI()
-        plan = decompose_question(client, question)
+        plan = preserve_compound_issues(question, decompose_question(client, question))
         if re.search(r"\besop\b|employee stock ownership", question, re.IGNORECASE):
             for item in plan:
                 item["search_terms"] = list(
@@ -2466,8 +2479,8 @@ def query_sop():
                     item.get("search_terms", []),
                     CORPUS_METADATA["edition"],
                     CORPUS_METADATA["sha256"],
-                    material_facts=item.get("material_facts", []),
-                    original_question=question,
+                    material_facts=[] if item.get("focused_retrieval") else item.get("material_facts", []),
+                    original_question="" if item.get("focused_retrieval") else question,
                 )
                 ids = []
                 for source in retrieved:
@@ -2515,19 +2528,12 @@ def query_sop():
                 for db_id in db_ids
                 if db_id in source_by_db_id
             ]
-            context_sources = select_context_sources(
-                context_sources,
-                prioritize_seller_note=bool(
-                    SELLER_NOTE_TOPIC_RE.search(retrieval_seed)
-                    and not has_guaranty_intent(retrieval_seed)
-                ),
-            )
             # Only user-supplied facts determine applicability. The planning
             # model may restate or overgeneralize a subquestion, so it must not
             # introduce a new transaction type or negate an explicit exclusion.
             fact_tags = classify_question(question)
             if fact_tags.get("product_lines") == ["standard_7a"] and not re.search(
-                r"sba\s+express|7\s*\(\s*a\s*\)\s+small|7a\s+small|"
+                r"(?:sba|export)\s+express|7\s*\(\s*a\s*\)\s+small|7a\s+small|"
                 r"export\s+working\s+capital|international\s+trade|"
                 r"\bcaplines\b|\bmarc\b|\b504\b",
                 question,
@@ -2576,8 +2582,6 @@ def query_sop():
                 }
                 if gate["admitted"]:
                     applicable_sources.append(source)
-                    applicable_source_pool[source.db_id] = source
-                    applicable_gate_pool[source.source_id] = gate
                 else:
                     inapplicable_sources.append(
                         (
@@ -2592,6 +2596,28 @@ def query_sop():
                     "SOP applicability gate: %s",
                     json.dumps(telemetry, sort_keys=True),
                 )
+            ranked_sources = select_context_sources(
+                [source for source in applicable_sources if source.similarity >= MIN_RETRIEVAL_SIMILARITY],
+                prioritize_seller_note=bool(
+                    SELLER_NOTE_TOPIC_RE.search(retrieval_seed)
+                    and not has_guaranty_intent(retrieval_seed)
+                ),
+            )
+            selected_ids = {source.source_id for source in ranked_sources}
+            ranking_rejections = [
+                (source, "Below the retrieval relevance threshold." if source.similarity < MIN_RETRIEVAL_SIMILARITY
+                 else "Lower-ranked passage excluded by the per-issue context limit.")
+                for source in applicable_sources if source.source_id not in selected_ids
+            ]
+            applicable_sources = ranked_sources
+            for source in applicable_sources:
+                applicable_source_pool[source.db_id] = source
+                applicable_gate_pool[source.source_id] = gate_by_source_id[source.source_id]
+            for source, reason in ranking_rejections:
+                app.logger.info("SOP evidence rejection: %s", json.dumps({
+                    "subquestion_id": subquestion_id, "chunk_id": source.db_id,
+                    "reason": reason,
+                }))
             policy_issue = derive_policy_issue(
                 client, question, retrieval_seed, applicable_sources
             )
@@ -2618,7 +2644,7 @@ def query_sop():
             generated = generate_propositions(
                 client,
                 question,
-                canonical_question,
+                retrieval_seed,
                 list(dict.fromkeys([question, *item.get("material_facts", [])])),
                 applicable_sources,
                 subquestion_id,
@@ -2631,6 +2657,12 @@ def query_sop():
             )
             if deterministic_conclusion:
                 generated["applied_conclusion"] = deterministic_conclusion
+            if item.get("focused_retrieval"):
+                grounded_conclusion = grounded_covenant_conclusion(
+                    question, retrieval_seed, applicable_sources
+                )
+                if grounded_conclusion:
+                    generated["applied_conclusion"] = grounded_conclusion
             # Rows are built once from the pooled admitted provisions below.
             if has_guaranty_intent(question):
                 generated["guarantor_rows"] = []
@@ -2648,6 +2680,8 @@ def query_sop():
                     "question": canonical_question,
                     "requested_question": retrieval_seed,
                     "policy_issue": policy_issue,
+                    "ranking_rejections": ranking_rejections,
+                    "focused_retrieval": item.get("focused_retrieval", False),
                     "generated": generated,
                     "candidate_index": index,
                     "search_terms": item.get("search_terms", []),
@@ -2831,6 +2865,10 @@ def query_sop():
         for index, item in enumerate(subanswers):
             if not item["sources_available"]:
                 continue
+            # Do not replace a missing fact-applied answer with a recited rule
+            # for the compound deposit/rate issues.
+            if item.get("focused_retrieval"):
+                continue
             has_supported_conclusion = any(
                 candidate["kind"] == "conclusion"
                 and candidate["subanswer_index"] == index
@@ -2878,13 +2916,17 @@ def query_sop():
                 if fallback_trigger:
                     item["unresolved_trigger"] = fallback_trigger
                 else:
-                    validated_candidates.append(fallback_candidate)
-                    audit_results[len(validated_candidates) - 1] = {
-                        "entailment_supported": True,
-                        "relevant_to_subquestion": True,
-                        "admitted_for_render": True,
-                        "derived_from_audited_candidates": True,
-                    }
+                    checked_fallback = validate_candidate_citations(
+                        [fallback_candidate], source_by_id
+                    )
+                    if checked_fallback:
+                        validated_candidates.extend(checked_fallback)
+                        audit_results[len(validated_candidates) - 1] = {
+                            "entailment_supported": True,
+                            "relevant_to_subquestion": True,
+                            "admitted_for_render": True,
+                            "derived_from_audited_candidates": True,
+                        }
         supported_candidates = [
             candidate
             for index, candidate in enumerate(validated_candidates)
@@ -2913,6 +2955,7 @@ def query_sop():
                         condition_result=gate.get("condition_result", "failed"),
                         condition_reason=gate.get("condition_reason"),
                         conditions=gate.get("conditions", []),
+                        application=citation.get("application"),
                     )
                 )
             candidate["citations"] = hydrated_citations
@@ -2957,7 +3000,27 @@ def query_sop():
                     and candidate["subanswer_index"] == index
                     and not candidate_admitted(audit_results.get(candidate_index))
                 ):
-                    rejected_conclusion_citations.extend(candidate["citations"])
+                    for citation in candidate["citations"]:
+                        rejected_conclusion_citations.append({
+                            **citation,
+                            "rejection_reason": (
+                                "Citation does not establish the requested sub-issue "
+                                "and its fact-specific application."
+                            ),
+                        })
+            rejected_conclusion_citations.extend(
+                citation
+                for candidate in candidates
+                if candidate["subanswer_index"] == index
+                for citation in candidate.get("rejected_citations", [])
+            )
+            rejected_conclusion_citations.extend(
+                build_citation(
+                    source, "", False, rejection_reason=reason,
+                    applicability_reason=reason,
+                )
+                for source, reason in item.get("ranking_rejections", [])
+            )
             rejected_conclusion_citations.extend(
                 build_citation(
                     source,
@@ -2965,6 +3028,7 @@ def query_sop():
                     False,
                     applicability_status="not_applicable",
                     applicability_reason=reason,
+                    rejection_reason=reason,
                     condition_result=item["gate_by_source_id"].get(
                         source.source_id, {}
                     ).get("condition_result", "failed"),
@@ -3175,6 +3239,35 @@ def query_sop():
                 telemetry["reached_applied_conclusion"] = bool(
                     applied_conclusion or row_candidates
                 )
+            if not applied_conclusion and not row_candidates:
+                support_note = f"Not addressed by retrieved provisions. {support_note or answer}"
+                answer = support_note
+            used_ids = {
+                citation["source_id"]
+                for artifact in [applied_conclusion, *propositions, *guarantor_rows]
+                if artifact
+                for citation in artifact.get("citations", [])
+            }
+            rejected_ids = {citation["source_id"] for citation in rejected_conclusion_citations}
+            for source_id in item["admitted_source_ids"]:
+                if source_id not in used_ids and source_id not in rejected_ids:
+                    rejected_conclusion_citations.append(build_citation(
+                        source_by_id[source_id], "", False,
+                        rejection_reason="No responsive, audited claim used this passage for this sub-issue.",
+                    ))
+            for citation in rejected_conclusion_citations:
+                citation["supports_conclusion"] = False
+                citation["rejection_reason"] = (
+                    citation.get("rejection_reason")
+                    or citation.get("applicability_reason")
+                    or citation.get("condition_reason")
+                    or "The passage did not establish this sub-issue's applied conclusion."
+                )
+                app.logger.info("SOP evidence rejection: %s", json.dumps({
+                    "subquestion_id": item["subquestion_id"],
+                    "source_id": citation["source_id"],
+                    "reason": citation["rejection_reason"],
+                }))
             item["synthesizer_telemetry"]["returned"] = {
                 **item["generated"],
                 "final_applied_conclusion": applied_conclusion,
@@ -3223,21 +3316,14 @@ def query_sop():
             )
             all_citations.extend(candidate["citations"])
 
-        summary_sentences = [
-            subanswer["applied_conclusion"]["text"]
-            for subanswer in rendered_subanswers
-            if subanswer.get("applied_conclusion")
-        ][:4]
-        summary = " ".join(summary_sentences)
-        has_applied_summary = bool(summary)
+        summary = synthesize_bottom_line(rendered_subanswers)
+        has_applied_summary = any(item.get("applied_conclusion") for item in rendered_subanswers)
         assumptions: list[str] = []
         if standard_product_assumed:
             assumptions.append(
                 "No loan product was specified; this analysis treats the transaction "
                 "as a Standard 7(a) loan."
             )
-        if not has_applied_summary:
-            summary = "No applied conclusion was established from the retrieved SOP provisions."
         answer_parts: list[str] = []
         if has_applied_summary:
             answer_parts.append(summary)
@@ -3324,6 +3410,10 @@ def decompose_question(client: OpenAI, question: str) -> list[dict[str, Any]]:
                         "separate retrieval seed, and include the user's own wording for "
                         "each issue in search_terms. Do not let one policy issue replace "
                         "another fact dimension in the prompt. "
+                        "An OR between possible legal restrictions is not one issue: "
+                        "retrieve each independently. In particular, a deposit-account "
+                        "covenant and a covenant-triggered interest increase require "
+                        "separate Preference/compensating-balance and note-rate analyses. "
                         "Use the user's terms and neutral retrieval synonyms only as "
                         "retrieval seeds. Do not invent a policy conclusion, and do not "
                         "select from a fixed list of known issue types. The canonical "
@@ -3827,7 +3917,6 @@ def retrieve_for_subquestion(
         for source in sorted(
             by_db_id.values(), key=lambda source: source.similarity, reverse=True
         )
-        if source.similarity >= MIN_RETRIEVAL_SIMILARITY
     ]
 
 
@@ -3841,6 +3930,19 @@ def generate_propositions(
     policy_issue: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     context = format_context(sources)
+    quote_menu = {
+        source.source_id: list(dict.fromkeys([
+            *[
+                clause["quote"] for clause in (policy_issue or {}).get("clauses", [])
+                if clause.get("source_id") == source.source_id
+                and isinstance(clause.get("quote"), str)
+                and clause["quote"] in source.chunk_text
+                and len(sentences(clause["quote"])) == 1
+            ],
+            *quote_options(source.chunk_text, subquestion),
+        ]))
+        for source in sources
+    }
     synthesizer_input = {
         "subquestion_id": subquestion_id,
         "original_question": original_question,
@@ -3872,8 +3974,27 @@ def generate_propositions(
                 "content": (
                     "Answer only from the supplied SOP passages. First write one short "
                     "applied conclusion in your own words that answers the source-derived "
-                    "policy issue against the user's facts. Do not copy a quoted rule "
+                        "policy issue against the user's facts. Do not copy a quoted rule "
                     "into the applied conclusion. Attach citations to that conclusion. "
+                    "For EACH applied citation, quote at most ONE sentence of operative "
+                    "language by selecting a quote_id from that source's VERBATIM "
+                    "QUOTE OPTIONS. Do NOT write, abbreviate, or repair the quote. "
+                    "and provide an application of ONE to THREE sentences connecting "
+                    "that passage to the concrete facts. Do not repeat the bottom line "
+                    "or just paraphrase a rule. Identify the governing rule by what "
+                    "the proposed provision actually does, not by the user's label. "
+                    "If that label is incomplete or wrong, explain the better framing. "
+                    "For a covenant-triggered rate increase, analyze changes to the "
+                    "Note rate/spread as well as any applicable default-rate rule; "
+                    "explicitly explain that an increase triggered by failure to "
+                    "maintain accounts changes the Note rate/spread, rather than "
+                    "merely adopting the label default rate. If the loan's fixed/"
+                    "variable structure or required consent is unstated, preserve "
+                    "that limitation. A Preference definition alone is not a "
+                    "prohibition: cite the prohibiting provision as well for a "
+                    "prohibited result and preserve the SBA-consent qualification. "
+                    "do not assume a permissive program-specific exception applies. "
+                    "Never use another loan program's exception as governing support. "
                     "Then provide atomic supporting policy propositions, each with a "
                     "citation. A proposition is allowed only when its cited passage "
                     "actually states the complete proposition. Do not use general legal, "
@@ -3889,8 +4010,10 @@ def generate_propositions(
                     "for computed amounts only when the cited rule and stated facts "
                     "supply the rate and base. If a point is not addressed by the "
                     "passages, leave the conclusion empty rather than guessing. Treat "
-                    "the source-derived policy issue as the only requested issue; a "
-                    "related passage about another subject is not an answer. When "
+                    "the discrete sub-question as the requested issue, and use the "
+                    "source-derived issue to anchor its evidence without silently "
+                    "dropping any explicitly requested facet; a related passage "
+                    "about another subject is not an answer. When "
                     "enumerating guarantors, list every party separately with its "
                     "capacity and the provision that triggers its obligation. Return "
                     "one structured row per party per capacity in guarantor_rows; never "
@@ -3908,6 +4031,8 @@ def generate_propositions(
                     f"SOURCE-DERIVED POLICY ISSUE:\n{json.dumps(policy_issue or {})}\n\n"
                     f"DISCRETE SUB-QUESTION:\n{subquestion}\n\n"
                     f"MATERIAL FACTS TO CHECK:\n{json.dumps(material_facts)}\n\n"
+                    f"VERBATIM QUOTE OPTIONS (use the explicit source_id and quote_id):\n"
+                    f"{json.dumps([{'source_id': source_id, 'options': [{'quote_id': index, 'quote': quote} for index, quote in enumerate(options)]} for source_id, options in quote_menu.items()])}\n\n"
                     f"SOP CONTEXT:\n{context}"
                 ),
             },
@@ -3943,9 +4068,10 @@ def generate_propositions(
                                         "type": "object",
                                         "properties": {
                                             "source_id": {"type": "integer"},
-                                            "quote": {"type": "string"},
+                                            "quote_id": {"type": "integer", "minimum": 0},
+                                            "application": {"type": "string"},
                                         },
-                                        "required": ["source_id", "quote"],
+                                        "required": ["source_id", "quote_id", "application"],
                                         "additionalProperties": False,
                                     },
                                 },
@@ -4031,6 +4157,9 @@ def generate_propositions(
         },
     )
     result = parse_json(response.choices[0].message.content or "")
+    conclusion = result.get("applied_conclusion")
+    if isinstance(conclusion, dict):
+        resolve_applied_quotes(conclusion, quote_menu)
     returned = {
         "applied_conclusion": result.get(
             "applied_conclusion", {"text": "", "citations": []}
@@ -4071,8 +4200,25 @@ def validate_candidate_citations(
             gate = candidate.get("gate_by_source_id", {}).get(source_id)
             if not isinstance(gate, dict) or not gate.get("admitted"):
                 continue
+            application = citation.get("application")
+            if candidate.get("kind") == "conclusion" and not isinstance(application, str):
+                # Deterministic conclusions use already fact-specific prose;
+                # reduce their exact source excerpt to one operative sentence.
+                application = candidate["text"]
+                quote = sentences(quote)[0] if sentences(quote) else quote
+            error = (
+                applied_evidence_error(quote, application or "", source.chunk_text)
+                if candidate.get("kind") == "conclusion"
+                else None
+            )
             verified_quote = find_verbatim_quote(quote, source.chunk_text)
-            if verified_quote is None:
+            if verified_quote is None or error:
+                reason = error or "Unverified quote: text is not verbatim in the cited chunk."
+                rejected = build_citation(
+                    source, "", False, rejection_reason=reason,
+                )
+                candidate.setdefault("rejected_citations", []).append(rejected)
+                app.logger.warning("SOP citation rejected: source=%s reason=%s", source_id, reason)
                 continue
             citations.append(
                 build_citation(
@@ -4084,6 +4230,7 @@ def validate_candidate_citations(
                     condition_result=gate.get("condition_result", "failed"),
                     condition_reason=gate.get("condition_reason"),
                     conditions=gate.get("conditions", []),
+                    application=application,
                 )
             )
         if citations:
@@ -4311,7 +4458,10 @@ def unresolved_adjacent_trigger(
         previous_text = previous.chunk_text.rstrip()
         if not previous_text.endswith(":"):
             continue
-        trigger = re.split(r"\n\s*\n", previous_text)[-1].strip()
+        # DOCX paragraphs are stored with single newlines. An earlier
+        # conditional sentence must not turn a trailing subsection heading
+        # into a condition governing the next chunk.
+        trigger = previous_text.splitlines()[-1].strip()
         if not CONDITIONAL_TRIGGER_RE.search(trigger):
             continue
         if condition_trigger_is_established(trigger, fact_text):
@@ -4374,7 +4524,10 @@ def audit_propositions(
             {
                 "index": index,
                 "kind": candidate["kind"],
-                "proposition": candidate["text"],
+                "proposition": candidate["text"] + "\n" + "\n".join(
+                    f"Source {citation['source_id']} applied explanation: {citation['application']}"
+                    for citation in candidate["citations"] if citation.get("application")
+                ),
                 "subquestion_id": candidate.get("subquestion_id"),
                 "subquestion": candidate.get("subquestion", ""),
                 "requested_question": candidate.get("requested_question", ""),
@@ -4382,6 +4535,27 @@ def audit_propositions(
                 "evidence": evidence,
             }
         )
+    application_checks: dict[int, int] = {}
+    for candidate_index, candidate in enumerate(candidates):
+        if candidate["kind"] != "conclusion":
+            continue
+        for citation in candidate["citations"]:
+            if not citation.get("application"):
+                continue
+            audit_index = len(audit_items)
+            application_checks[audit_index] = candidate_index
+            audit_items.append({
+                "index": audit_index,
+                "kind": "citation_application",
+                "proposition": citation["application"],
+                "subquestion": candidate.get("requested_question", ""),
+                "requested_question": candidate.get("requested_question", ""),
+                "policy_issue": {},
+                "evidence": [{
+                    "source_id": citation["source_id"],
+                    "quote": citation["quote"],
+                }],
+            })
     try:
         response = client.chat.completions.create(
             model=ANSWER_MODEL,
@@ -4414,7 +4588,13 @@ def audit_propositions(
                         "conditional and the question does not establish its trigger, "
                         "use nearby context_only passages to identify the trigger and "
                         "do not state an unconditional applied result. Verify every actor, threshold, "
-                        "exception, amount, comparison, and computed result. Reject "
+                        "exception, amount, comparison, and computed result. Each "
+                        "source-specific applied explanation must follow from that "
+                        "source's quote plus stated facts, not another program's "
+                        "rule or an uncited assumption. Items marked "
+                        "citation_application have ONLY the selected quote as "
+                        "authority: no surrounding source text or another citation "
+                        "can supply missing operative language. Reject "
                         "claims that add unstated content. Do not repair or rewrite "
                         "propositions. If the policy issue is absent or the item "
                         "answers an adjacent issue, return relevant=false. Missing or "
@@ -4475,7 +4655,23 @@ def audit_propositions(
                 and isinstance(item.get("relevant"), bool)
             )
         }
+        for audit_index, candidate_index in application_checks.items():
+            if not candidate_admitted(checks.get(audit_index)):
+                checks[candidate_index] = {
+                    "entailment_supported": False,
+                    "relevant_to_subquestion": False,
+                    "admitted_for_render": False,
+                    "citation_application_failed": True,
+                }
         for index, candidate in enumerate(candidates):
+            scope_error = conclusion_scope_error(candidate)
+            if scope_error:
+                checks[index] = {
+                    "entailment_supported": False,
+                    "relevant_to_subquestion": False,
+                    "admitted_for_render": False,
+                }
+                app.logger.warning("Withholding incomplete applied conclusion: %s", scope_error)
             if candidate.get("kind") in {"conclusion", "proposition"}:
                 cited_issue_text = "\n".join(
                     "\n".join(
@@ -4573,7 +4769,12 @@ def build_citation(
     condition_result: str = "passed",
     condition_reason: str | None = None,
     conditions: list[dict[str, Any]] | None = None,
+    application: str | None = None,
+    rejection_reason: str | None = None,
 ) -> dict[str, Any]:
+    located = bool(quote.strip() and quote.strip() in source.chunk_text)
+    if not located:
+        quote = ""
     return {
         "source_id": source.source_id,
         "section_ref": source.section_ref,
@@ -4582,9 +4783,12 @@ def build_citation(
         "source_version": source.sop_version,
         "effective_date": source.effective_date,
         "page_number": source.page_number,
-        "quote_located": True,
-        "supports_conclusion": supports_conclusion,
-        "verified": True,
+        "quote_located": located,
+        "supports_conclusion": bool(supports_conclusion and located and applicability_status == "applicable"),
+        "verified": located,
+        "application": application,
+        "rejection_reason": rejection_reason,
+        "program_scope": source_tags(source)["product_lines"] or source_tags(source)["program_scopes"] or ["general"],
         "applicability_status": applicability_status,
         "applicability_reason": applicability_reason,
         "condition_result": condition_result,
@@ -4620,46 +4824,9 @@ def parse_json(text: str) -> dict[str, Any]:
 
 
 def find_verbatim_quote(quote: str, source: str) -> str | None:
-    """Return a source-backed quote, repairing only formatting/trailing punctuation."""
-    if not quote.strip():
-        return None
-    if quote in source:
-        return quote
-
-    normalized_quote = re.sub(r"\s+", " ", quote).strip()
-    normalized_source = re.sub(r"\s+", " ", source).strip()
-    if normalized_quote in normalized_source:
-        return quote.strip()
-
-    prefix = quote.strip().rstrip(".!?").rstrip()
-    if len(prefix) < 40:
-        return None
-    start = source.find(prefix)
-    if start >= 0:
-        end_match = re.search(r"[.!?](?=\s|$)", source[start + len(prefix) :])
-        if end_match:
-            end = start + len(prefix) + end_match.end()
-            return source[start:end]
-
-    quote_tokens = re.findall(r"[A-Za-z0-9%]+", quote.casefold())
-    if len(quote_tokens) < 8:
-        return None
-    best_sentence = None
-    best_score = 0.0
-    for sentence in re.split(r"(?<=[.!?])\s+", source):
-        source_tokens = re.findall(r"[A-Za-z0-9%]+", sentence.casefold())
-        if len(source_tokens) < 8:
-            continue
-        score = SequenceMatcher(None, quote_tokens, source_tokens).ratio()
-        matching_tokens = sum(
-            block.size
-            for block in SequenceMatcher(None, quote_tokens, source_tokens).get_matching_blocks()
-        )
-        coverage = matching_tokens / min(len(quote_tokens), len(source_tokens))
-        if score >= 0.62 and coverage >= 0.62 and score > best_score:
-            best_sentence = sentence.strip()
-            best_score = score
-    return best_sentence
+    """An approximate quotation is not a verified quotation."""
+    value = quote.strip()
+    return value if value and value in source else None
 
 
 if __name__ == "__main__":
