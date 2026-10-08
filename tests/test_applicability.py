@@ -57,6 +57,7 @@ from applicability import (  # noqa: E402
     classify_question,
     classify_text,
 )
+from sophia_issues import preference_authority_clause  # noqa: E402
 from app import (  # noqa: E402
     RetrievedSource,
     GUARANTY_RETRIEVAL_QUERY,
@@ -77,6 +78,7 @@ from app import (  # noqa: E402
     internal_conditions_check,
     retrieve_for_subquestion,
     select_context_sources,
+    source_tags,
     unresolved_adjacent_trigger,
     validate_candidate_citations,
     build_citation,
@@ -1007,6 +1009,75 @@ class ApplicabilityRegressionTests(unittest.TestCase):
             [*unrelated, sources[0]], prioritize_preference_authority=True
         )
         self.assertIn(sources[0], selected)
+
+    def test_504_preference_never_uses_appendix_19_7a_authority(self):
+        fixture = json.loads(
+            (Path(__file__).parent / "fixtures" / "sophia_issue_evals.json").read_text()
+        )
+        case = next(
+            item for item in fixture["cases"]
+            if item["id"] == "504-deposit-account-preference-scope"
+        )
+        question = case["question"]
+        fact_tags = classify_question(question)
+        self.assertEqual(fact_tags["product_lines"], ["504"])
+
+        authority = (
+            "Adequacy of collateral\nA Lender may not take any action in connection "
+            "with an SBA-guaranteed loan that establishes a preference in favor of "
+            "the Lender (13 CFR § 120.411)."
+        )
+        appendix_19_7a = RetrievedSource(
+            db_id=334,
+            source_id=34,
+            sop_version="SOP 50 10 8.1",
+            effective_date="2026-10-01",
+            page_number=390,
+            section_ref=(
+                "Appendices > Appendix 19: 7(a) Collateral Requirements > "
+                "General Requirements"
+            ),
+            chunk_text=authority,
+            similarity=1.0,
+            program_scopes=("7a",),
+        )
+
+        self.assertEqual(source_tags(appendix_19_7a)["program_scopes"], ["7a"])
+        authority_clause = preference_authority_clause(appendix_19_7a.chunk_text)
+        self.assertIsNotNone(authority_clause)
+        gate = evaluate_source_gate(
+            appendix_19_7a, question, fact_tags, condition_text=authority_clause
+        )
+        self.assertFalse(gate["applicable"])
+        self.assertFalse(gate["admitted"])
+        self.assertIn("program_scopes", gate["applicability_reason"] or "")
+
+        # Retrieval can surface the 7(a) passage, but scope filtering happens
+        # before preference-authority ranking and before citation validation.
+        ranked = select_context_sources(
+            [appendix_19_7a], prioritize_preference_authority=True
+        )
+        self.assertEqual(ranked, [appendix_19_7a])
+        eligible = [source for source in ranked if source.source_id != appendix_19_7a.source_id]
+        self.assertEqual(eligible, [])
+
+        candidate = {
+            "kind": "conclusion",
+            "text": "The lender's deposit-account arrangement is a prohibited Preference.",
+            "requested_question": case["issues"][0]["label"],
+            "applicable_source_ids": [appendix_19_7a.source_id],
+            "citations": [{
+                "source_id": appendix_19_7a.source_id,
+                "quote": authority_clause,
+                "application": "The 7(a) collateral rule prohibits this arrangement.",
+            }],
+            "gate_by_source_id": {appendix_19_7a.source_id: gate},
+        }
+        self.assertEqual(
+            validate_candidate_citations([candidate], {appendix_19_7a.source_id: appendix_19_7a}),
+            [],
+        )
+        self.assertTrue(candidate["rejected_citations"])
 
     def test_candidate_validation_rechecks_recorded_gate(self):
         source = RetrievedSource(

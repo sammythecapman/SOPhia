@@ -56,7 +56,7 @@ def evaluate(case: dict, result: dict) -> dict[str, bool]:
         citation for item in subanswers
         for citation in (item.get("applied_conclusion") or {}).get("citations", [])
     ]
-    checks["applied citations have verified quotes and explanations"] = bool(applied) and all(
+    applied_citations_verified = bool(applied) and all(
         citation.get("verified") and citation.get("quote_located")
         and citation.get("supports_conclusion")
         and not applied_evidence_error(
@@ -65,27 +65,39 @@ def evaluate(case: dict, result: dict) -> dict[str, bool]:
         )
         for citation in applied
     )
+    explicit_gap = bool(case.get("allow_explicit_gap")) and any(
+        re.search(issue["pattern"], item.get("requested_question") or "", re.I)
+        and "Not addressed by retrieved provisions" in (
+            item.get("support_note") or item.get("answer", "")
+        )
+        for issue in case["issues"] for item in subanswers
+    )
+    checks["applied citations verified or permitted explicit gap"] = (
+        applied_citations_verified if applied else explicit_gap
+    )
     rejected = [citation for item in subanswers for citation in item.get("rejected_citations", [])]
-    checks["rejected evidence includes reasons"] = bool(rejected) and all(
-        citation.get("rejection_reason") and not citation.get("supports_conclusion")
-        for citation in rejected
+    checks["rejected evidence includes reasons"] = (
+        (bool(rejected) or explicit_gap)
+        and all(citation.get("rejection_reason") and not citation.get("supports_conclusion")
+                for citation in rejected)
     )
     terms = " ".join(term for item in subanswers for term in item.get("searched_terms", []))
     checks["Preference SBA query expansion"] = all(
         term.casefold() in terms.casefold() for term in case.get("required_expansions", [])
     )
-    rate_answers = matches[-1] if matches else []
-    checks["substance over default-rate label"] = bool(rate_answers) and all(
-        not item.get("applied_conclusion")
-        or re.search(
-            case.get("substance_pattern", ".*"),
-            item["applied_conclusion"]["text"] + " " + " ".join(
-                citation.get("application") or ""
-                for citation in item["applied_conclusion"].get("citations", [])
-            ), re.I,
+    if case.get("substance_pattern"):
+        rate_answers = matches[-1] if matches else []
+        checks["substance over default-rate label"] = bool(rate_answers) and all(
+            not item.get("applied_conclusion")
+            or re.search(
+                case["substance_pattern"],
+                item["applied_conclusion"]["text"] + " " + " ".join(
+                    citation.get("application") or ""
+                    for citation in item["applied_conclusion"].get("citations", [])
+                ), re.I,
+            )
+            for item in rate_answers
         )
-        for item in rate_answers
-    )
     return checks
 
 
