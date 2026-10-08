@@ -30,6 +30,10 @@ def evaluate(case: dict, result: dict) -> dict[str, bool]:
         checks[f"labeled issue: {issue['label']}"] = bool(found)
         checks[f"answer or explicit gap: {issue['label']}"] = bool(found) and all(
             item.get("applied_conclusion")
+            or any(
+                row.get("status") == "required" and row.get("citations")
+                for row in item.get("guarantor_rows", [])
+            )
             or "Not addressed by retrieved provisions" in (item.get("support_note") or item.get("answer", ""))
             for item in found
         )
@@ -128,6 +132,13 @@ def evaluate(case: dict, result: dict) -> dict[str, bool]:
         )
         checks[f"no unsupported claim: {forbidden['label']}"] = not bool(
             re.search(forbidden["pattern"], visible_answers, re.I | re.S)
+        )
+    conclusions = " ".join(
+        (item.get("applied_conclusion") or {}).get("text", "") for item in subanswers
+    )
+    for pattern in case.get("required_conclusion_patterns", []):
+        checks[f"visible conclusion covers: {pattern}"] = bool(
+            re.search(pattern, conclusions, re.I | re.S)
         )
     return checks
 

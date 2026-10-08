@@ -103,6 +103,31 @@
         "present_patterns": ["fixed.rate", "(?:signed|written agreement).{0,65}(?:agreement|consent|Note.rate change)"],
         "absent_patterns": ["facts do not establish the rate structure", "(?:the|this) loan is variable.rate"]
       }]
+    },
+    {
+      "id": "trust-signers-named-capacities",
+      "question": "For a Standard 7(a) applicant, two revocable trusts own 12% and 8%. Trust A's trustee is Person A and its Trustor is Person B. Trust B's trustee is Person C and its Trustor is Person D. Do the trusts' ownership percentages aggregate for guaranty purposes, and who must sign in each capacity?",
+      "issues": [
+        {"label": "Trust aggregation", "pattern": "aggregat|ownership"},
+        {"label": "Trust signer capacities", "pattern": "sign|execut|guarantor"}
+      ],
+      "allowed_support_programs": ["general", "7a", "standard_7a"],
+      "required_expansions": [],
+      "allow_explicit_gap": true,
+      "required_conclusion_patterns": ["\\bTrustor\\b", "personal(?:ly)?.{0,35}guarant", "\\bPerson B\\b", "\\bPerson D\\b"]
+    },
+    {
+      "id": "trust-below-aggregation-threshold",
+      "question": "For a Standard 7(a) applicant, two revocable trusts own 12% and 6%. Does their aggregate ownership meet the 20% threshold in the SOP trust-guaranty provision?",
+      "issues": [
+        {"label": "Trust ownership threshold", "pattern": "aggregat|threshold|ownership"}
+      ],
+      "allowed_support_programs": ["general", "7a", "standard_7a"],
+      "required_expansions": [],
+      "allow_explicit_gap": true,
+      "forbidden_claims": [
+        {"label": "18 percent does not meet or exceed 20 percent", "pattern": "(?:aggregate|combined|total) ownership (?:meets|exceeds|is (?:greater|more) than) (?:the )?20"}
+      ]
     }
   ]
 }

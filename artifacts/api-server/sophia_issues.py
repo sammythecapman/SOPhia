@@ -78,7 +78,10 @@ def sentences(text: str) -> list[str]:
     """Count prose sentences without treating decimals/CFR references as stops."""
     return [
         part.strip()
-        for part in re.split(r"(?<=[.!?])\s+(?=[A-Z\"“])", text.strip())
+        for part in re.split(
+            r"(?<!Para\.)(?<!Ch\.)(?<!Sec\.)(?<!U\.S\.)(?<=[.!?])\s+(?=[A-Z\"“])",
+            text.strip(),
+        )
         if part.strip()
     ]
 

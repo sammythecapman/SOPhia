@@ -1,40 +1,31 @@
 {
-  "manual_review": {
-    "status": "FAILED_COMPLETENESS",
-    "scope": "development only",
-    "aggregation": "Correct: 12% plus 8% equals the 20% threshold; each trust provides an unlimited full guaranty.",
-    "trustee_execution": "Supported by its operative quote.",
-    "missing_capacity": "The retrieved Trustor personal-guaranty obligation is absent from the visible signer answer and rows.",
-    "fact_echo": "Correctly omits the interrogative aggregation fragment.",
-    "review_document": "outputs/sophia-answer-review.md"
-  },
   "environment": "development",
-  "recorded_at_utc": "2026-10-08T15:15:03.186074+00:00",
+  "recorded_at_utc": "2026-10-08T20:27:22.482834+00:00",
   "question": "A 7(a) applicant is owned by two revocable trusts, one at 12% and one at 8%. Under SOP 50 10 8.1 with Technical Policy Updates, do the trusts' ownership percentages aggregate for guaranty purposes, and who must sign?",
   "health_before": {
-    "build_sha": "7f6d64de265556d519bd29d2238d504b4b92ab9f6f8a3fd5a8ee10ba76061891",
+    "build_sha": "c3bbfe00f886711c40d97ddbbfe3b154e7f61f5b26b9206d937d7ca179a511c7",
     "build_sha_kind": "source-content-sha256",
     "chunk_count": 395,
     "effective_date": "2026-10-01",
-    "git_commit_sha": "c7680927c1aafdb357378988b2382a63c6cba234",
+    "git_commit_sha": "475e5426cab4802439cfb7b03563510d249a3287",
     "sop_version": "SOP 50 10 8.1",
     "source_sha256": "0fb0c4692cf529380827746e5fe812e42ea82b6f6fdf97a71d1093677d963183",
     "source_url": "https://www.sba.gov/document/sop-50-10-lender-development-company-loan-programs",
     "status": "ok"
   },
   "health_after": {
-    "build_sha": "7f6d64de265556d519bd29d2238d504b4b92ab9f6f8a3fd5a8ee10ba76061891",
+    "build_sha": "c3bbfe00f886711c40d97ddbbfe3b154e7f61f5b26b9206d937d7ca179a511c7",
     "build_sha_kind": "source-content-sha256",
     "chunk_count": 395,
     "effective_date": "2026-10-01",
-    "git_commit_sha": "c7680927c1aafdb357378988b2382a63c6cba234",
+    "git_commit_sha": "475e5426cab4802439cfb7b03563510d249a3287",
     "sop_version": "SOP 50 10 8.1",
     "source_sha256": "0fb0c4692cf529380827746e5fe812e42ea82b6f6fdf97a71d1093677d963183",
     "source_url": "https://www.sba.gov/document/sop-50-10-lender-development-company-loan-programs",
     "status": "ok"
   },
   "response": {
-    "answer": "Do the trusts' ownership percentages aggregate for guaranty purposes? The ownership percentages of the two trusts aggregate to meet the 20% threshold for guaranty requirements, necessitating that each trust provide an unlimited full guaranty.\n\nSupplied facts (quoted from your question): \u201cA 7(a) applicant is owned by two revocable trusts, one at 12% and one at 8%.\u201d. These stated facts are not a substitute for operative legal authority. Who must sign for the 7(a) applicant owned by the trusts? Both trusts must provide an unlimited full guaranty, and the trustee must sign on behalf of each trust.\n\nSupplied facts (quoted from your question): \u201cA 7(a) applicant is owned by two revocable trusts, one at 12% and one at 8%.\u201d. These stated facts are not a substitute for operative legal authority.",
+    "answer": "Do the trusts' ownership percentages aggregate for guaranty purposes? Not addressed by retrieved provisions. Who must sign for the 7(a) applicant owned by the trusts? The trusts must provide an unlimited full guaranty due to their combined ownership of 20% of the applicant, and the trustee must execute the guaranty on behalf of each trust. The trustee must execute the guaranty on behalf of the trust, ensuring that the trust's obligations are formally recognized in the loan agreement. The Trustor must also personally guarantee the loan, which adds an additional layer of security for the lender.\n\nSupplied facts (quoted from your question): \u201cA 7(a) applicant is owned by two revocable trusts, one at 12% and one at 8%.\u201d. These stated facts are not a substitute for operative legal authority.",
     "assumptions": [
       "No loan product was specified; this analysis treats the transaction as a Standard 7(a) loan."
     ],
@@ -1206,7 +1197,29 @@
         "program_scope": [
           "general"
         ],
-        "quote": "The trustee must execute the guaranty on behalf of the trust and provide the certifications required in Section A, Ch 2, Para.",
+        "quote": "The trustee must execute the guaranty on behalf of the trust and provide the certifications required in Section A, Ch 2, Para. A.2., Conditions that apply when the EPC is owned in whole or in part by a trust.",
+        "quote_located": true,
+        "rejection_reason": null,
+        "section_ref": "SBA 7(a) and 504 Business Loan Requirements > Section A. Core Requirements for all 7(a) and 504 Loans > Chapter 5: Other Core Requirements > Guaranties",
+        "source_chunk": "13 CFR \u00a7 120.160(a)\nEach loan must be guaranteed by at least one individual or entity. If no one individual or entity is a direct and/or indirect owner of 20% or more of the Applicant, at least one of the owners must provide a full unconditional guaranty. In addition, if the guaranty will be provided by a trust, the requirements of Paragraph 3, Corporate/Other Guaranties below must be met.\nPersonal Guaranties:\nAny individual who has direct and/or indirect ownership of 20% or more of an Applicant must provide an unlimited full guaranty. (SBA Form 148 or, for 7(a) loans, equivalent Lender\u2019s form). If a person has executed the Note as a Borrower in an individual capacity, that person does not also have to execute a personal guaranty.\nWhen ownership interest of an Applicant is held by a corporation, partnership or other form of legal entity, the ownership interests of all individuals must be disclosed.\nWhen deemed necessary for credit or other reasons, SBA or, for a loan processed on a delegated basis, the SBA Lender, may require other appropriate individuals or entities to provide full or limited guaranties of the loan without regard to the percentage of their ownership interests, if any. For example, an individual with a minority ownership or no ownership interest in the Applicant or OC who is critical to the operation of the business may be required to provide a personal guaranty (e.g., Supplemental Guarantors).\nIf a limited guaranty is used, the SBA Lender must choose one of the payment limitation options in SBA Form 148L (Unconditional Limited Guaranty) or, for 7(a) loans, equivalent Lender\u2019s form and specify the option in the SBA Terms and Conditions.\nThe SBA Lender must obtain a personal financial statement from all individuals guaranteeing the loan except for Supplemental Guarantors, dated within 90 days of loan approval.\nGuarantors must comply with the requirements in Ch. 1, Para. F, Citizenship and Residency Requirements.\nGuaranty of Spouse:\nEach spouse owning less than 20% of an Applicant must personally guarantee the loan in full when the combined ownership interest of both spouses and minor children is 20% or more.\nFor a non-owner spouse, the SBA Lender must require the signature of the spouse on the appropriate collateral documents. Non-owner spouses are not required to sign the personal financial statement. The spouse\u2019s guaranty secured by jointly held collateral will be limited to the spouse\u2019s interest in the collateral.\nGuarantors must comply with the requirements in Ch. 1, Para. F, Citizenship and Residency Requirements.\nCorporate/Other Guaranties:\nAll entities that have direct and/or indirect ownership of 20% or more of an Applicant must provide an unlimited full guaranty.\nWhen one or more trusts (revocable or irrevocable) own, in the aggregate, 20% or more of the applicant, each trust must provide an unlimited full guaranty. The trustee must execute the guaranty on behalf of the trust and provide the certifications required in Section A, Ch 2, Para. A.2., Conditions that apply when the EPC is owned in whole or in part by a trust. In addition, when a trust guaranty is required, the Trustor must also personally guarantee the loan. All donors to the trust will be deemed to have Trustor status for eligibility purposes.\nThe SBA Lender must obtain appropriate financial statements from all entities guaranteeing the loan in order to determine the assets available to support the guaranty.\nWhen deemed necessary for credit or other reasons, SBA or, for a loan processed on a delegated basis, the SBA Lender, may require other appropriate entities to provide full or limited guaranties of the loan without regard to the percentage of their ownership interests, if any. This may include entities who manage the day-to-day operations of the Applicant or OC through a Management Agreement without an ownership interest in the Applicant or OC.\nReducing Ownership Interest (Six-month lookback rule):\nAny Person (as defined in 13 CFR 120.10) subject to the guaranty requirements 6 months prior to the date of the loan application would continue to be subject to the requirements even if that Person has changed their ownership interest to less than 20%. Except for Ineligible Persons covered under Ch. 1, Para. F, Citizenship and Residency Requirements.\nExceptions to the 6-month lookback rule:\nWhen that Person completely divests their interest prior to the date of application. Complete divestiture includes divestiture of all ownership interest and severance of any relationship with the Applicant (and any associated Eligible Passive Company) in any capacity, including being an employee (paid or unpaid), for the life of the 7(a) or 504 loan.\nFor 7(a) loans for partial changes of ownership, the percentages of ownership for determining who must provide a guaranty will be based on the post-sale percentage of direct and/or indirect ownership in the business. See the appropriate sections in this SOP on partial changes of ownership for more information.",
+        "source_id": 1,
+        "source_version": "SOP 50 10 8.1",
+        "supports_conclusion": true,
+        "verified": true
+      },
+      {
+        "applicability_reason": null,
+        "applicability_status": "applicable",
+        "application": null,
+        "condition_reason": null,
+        "condition_result": "passed",
+        "conditions": [],
+        "effective_date": "2026-10-01",
+        "page_number": 93,
+        "program_scope": [
+          "general"
+        ],
+        "quote": "In addition, when a trust guaranty is required, the Trustor must also personally guarantee the loan.",
         "quote_located": true,
         "rejection_reason": null,
         "section_ref": "SBA 7(a) and 504 Business Loan Requirements > Section A. Core Requirements for all 7(a) and 504 Loans > Chapter 5: Other Core Requirements > Guaranties",
@@ -1593,36 +1606,8 @@
     ],
     "subanswers": [
       {
-        "answer": "The ownership percentages of the two trusts aggregate to meet the 20% threshold for guaranty requirements, necessitating that each trust provide an unlimited full guaranty.\n\nWhen one or more trusts own, in the aggregate, 20% or more of the applicant, each trust must provide an unlimited full guaranty.\n\nSupplied facts (quoted from your question): \u201cA 7(a) applicant is owned by two revocable trusts, one at 12% and one at 8%.\u201d. These stated facts are not a substitute for operative legal authority.",
-        "applied_conclusion": {
-          "arithmetic_valid": true,
-          "artifact_subquestion_id": "subquestion-1",
-          "citations": [
-            {
-              "applicability_reason": null,
-              "applicability_status": "applicable",
-              "application": "Since the combined ownership of the two trusts is 20%, they must both guarantee the loan.",
-              "condition_reason": null,
-              "condition_result": "passed",
-              "conditions": [],
-              "effective_date": "2026-10-01",
-              "page_number": 93,
-              "program_scope": [
-                "general"
-              ],
-              "quote": "When one or more trusts (revocable or irrevocable) own, in the aggregate, 20% or more of the applicant, each trust must provide an unlimited full guaranty.",
-              "quote_located": true,
-              "rejection_reason": null,
-              "section_ref": "SBA 7(a) and 504 Business Loan Requirements > Section A. Core Requirements for all 7(a) and 504 Loans > Chapter 5: Other Core Requirements > Guaranties",
-              "source_chunk": "13 CFR \u00a7 120.160(a)\nEach loan must be guaranteed by at least one individual or entity. If no one individual or entity is a direct and/or indirect owner of 20% or more of the Applicant, at least one of the owners must provide a full unconditional guaranty. In addition, if the guaranty will be provided by a trust, the requirements of Paragraph 3, Corporate/Other Guaranties below must be met.\nPersonal Guaranties:\nAny individual who has direct and/or indirect ownership of 20% or more of an Applicant must provide an unlimited full guaranty. (SBA Form 148 or, for 7(a) loans, equivalent Lender\u2019s form). If a person has executed the Note as a Borrower in an individual capacity, that person does not also have to execute a personal guaranty.\nWhen ownership interest of an Applicant is held by a corporation, partnership or other form of legal entity, the ownership interests of all individuals must be disclosed.\nWhen deemed necessary for credit or other reasons, SBA or, for a loan processed on a delegated basis, the SBA Lender, may require other appropriate individuals or entities to provide full or limited guaranties of the loan without regard to the percentage of their ownership interests, if any. For example, an individual with a minority ownership or no ownership interest in the Applicant or OC who is critical to the operation of the business may be required to provide a personal guaranty (e.g., Supplemental Guarantors).\nIf a limited guaranty is used, the SBA Lender must choose one of the payment limitation options in SBA Form 148L (Unconditional Limited Guaranty) or, for 7(a) loans, equivalent Lender\u2019s form and specify the option in the SBA Terms and Conditions.\nThe SBA Lender must obtain a personal financial statement from all individuals guaranteeing the loan except for Supplemental Guarantors, dated within 90 days of loan approval.\nGuarantors must comply with the requirements in Ch. 1, Para. F, Citizenship and Residency Requirements.\nGuaranty of Spouse:\nEach spouse owning less than 20% of an Applicant must personally guarantee the loan in full when the combined ownership interest of both spouses and minor children is 20% or more.\nFor a non-owner spouse, the SBA Lender must require the signature of the spouse on the appropriate collateral documents. Non-owner spouses are not required to sign the personal financial statement. The spouse\u2019s guaranty secured by jointly held collateral will be limited to the spouse\u2019s interest in the collateral.\nGuarantors must comply with the requirements in Ch. 1, Para. F, Citizenship and Residency Requirements.\nCorporate/Other Guaranties:\nAll entities that have direct and/or indirect ownership of 20% or more of an Applicant must provide an unlimited full guaranty.\nWhen one or more trusts (revocable or irrevocable) own, in the aggregate, 20% or more of the applicant, each trust must provide an unlimited full guaranty. The trustee must execute the guaranty on behalf of the trust and provide the certifications required in Section A, Ch 2, Para. A.2., Conditions that apply when the EPC is owned in whole or in part by a trust. In addition, when a trust guaranty is required, the Trustor must also personally guarantee the loan. All donors to the trust will be deemed to have Trustor status for eligibility purposes.\nThe SBA Lender must obtain appropriate financial statements from all entities guaranteeing the loan in order to determine the assets available to support the guaranty.\nWhen deemed necessary for credit or other reasons, SBA or, for a loan processed on a delegated basis, the SBA Lender, may require other appropriate entities to provide full or limited guaranties of the loan without regard to the percentage of their ownership interests, if any. This may include entities who manage the day-to-day operations of the Applicant or OC through a Management Agreement without an ownership interest in the Applicant or OC.\nReducing Ownership Interest (Six-month lookback rule):\nAny Person (as defined in 13 CFR 120.10) subject to the guaranty requirements 6 months prior to the date of the loan application would continue to be subject to the requirements even if that Person has changed their ownership interest to less than 20%. Except for Ineligible Persons covered under Ch. 1, Para. F, Citizenship and Residency Requirements.\nExceptions to the 6-month lookback rule:\nWhen that Person completely divests their interest prior to the date of application. Complete divestiture includes divestiture of all ownership interest and severance of any relationship with the Applicant (and any associated Eligible Passive Company) in any capacity, including being an employee (paid or unpaid), for the life of the 7(a) or 504 loan.\nFor 7(a) loans for partial changes of ownership, the percentages of ownership for determining who must provide a guaranty will be based on the post-sale percentage of direct and/or indirect ownership in the business. See the appropriate sections in this SOP on partial changes of ownership for more information.",
-              "source_id": 1,
-              "source_version": "SOP 50 10 8.1",
-              "supports_conclusion": true,
-              "verified": true
-            }
-          ],
-          "text": "The ownership percentages of the two trusts aggregate to meet the 20% threshold for guaranty requirements, necessitating that each trust provide an unlimited full guaranty.\n\nSupplied facts (quoted from your question): \u201cA 7(a) applicant is owned by two revocable trusts, one at 12% and one at 8%.\u201d. These stated facts are not a substitute for operative legal authority."
-        },
+        "answer": "See the guarantor table below for each required party and capacity.\n\nWhen one or more trusts own, in the aggregate, 20% or more of the applicant, each trust must provide an unlimited full guaranty.",
+        "applied_conclusion": null,
         "gate_telemetry": [
           {
             "applicability_reason": null,
@@ -4292,7 +4277,7 @@
           {
             "additional_conditions": "",
             "artifact_subquestion_id": "subquestion-1",
-            "capacity": "owner",
+            "capacity": "Owner",
             "citations": [
               {
                 "applicability_reason": null,
@@ -4322,12 +4307,12 @@
             "ownership_percentage": 12,
             "party": "Trust 1",
             "status": "required",
-            "triggering_provision": "must provide an unlimited full guaranty"
+            "triggering_provision": "each trust must provide an unlimited full guaranty"
           },
           {
             "additional_conditions": "",
             "artifact_subquestion_id": "subquestion-1",
-            "capacity": "owner",
+            "capacity": "Owner",
             "citations": [
               {
                 "applicability_reason": null,
@@ -4357,7 +4342,7 @@
             "ownership_percentage": 8,
             "party": "Trust 2",
             "status": "required",
-            "triggering_provision": "must provide an unlimited full guaranty"
+            "triggering_provision": "each trust must provide an unlimited full guaranty"
           }
         ],
         "no_provision": false,
@@ -4407,6 +4392,28 @@
         ],
         "question": "Policy issue: When one or more trusts (revocable or irrevocable) own, in the aggregate, 20% or more of the applicant, each trust must provide an unlimited full guaranty.",
         "rejected_citations": [
+          {
+            "applicability_reason": null,
+            "applicability_status": "applicable",
+            "application": "Since the two trusts together own 20% of the applicant, they meet the threshold for requiring each trust to provide a full guaranty.",
+            "condition_reason": null,
+            "condition_result": "passed",
+            "conditions": [],
+            "effective_date": "2026-10-01",
+            "page_number": 93,
+            "program_scope": [
+              "general"
+            ],
+            "quote": "When one or more trusts (revocable or irrevocable) own, in the aggregate, 20% or more of the applicant, each trust must provide an unlimited full guaranty.",
+            "quote_located": true,
+            "rejection_reason": "Citation does not establish the requested sub-issue and its fact-specific application.",
+            "section_ref": "SBA 7(a) and 504 Business Loan Requirements > Section A. Core Requirements for all 7(a) and 504 Loans > Chapter 5: Other Core Requirements > Guaranties",
+            "source_chunk": "13 CFR \u00a7 120.160(a)\nEach loan must be guaranteed by at least one individual or entity. If no one individual or entity is a direct and/or indirect owner of 20% or more of the Applicant, at least one of the owners must provide a full unconditional guaranty. In addition, if the guaranty will be provided by a trust, the requirements of Paragraph 3, Corporate/Other Guaranties below must be met.\nPersonal Guaranties:\nAny individual who has direct and/or indirect ownership of 20% or more of an Applicant must provide an unlimited full guaranty. (SBA Form 148 or, for 7(a) loans, equivalent Lender\u2019s form). If a person has executed the Note as a Borrower in an individual capacity, that person does not also have to execute a personal guaranty.\nWhen ownership interest of an Applicant is held by a corporation, partnership or other form of legal entity, the ownership interests of all individuals must be disclosed.\nWhen deemed necessary for credit or other reasons, SBA or, for a loan processed on a delegated basis, the SBA Lender, may require other appropriate individuals or entities to provide full or limited guaranties of the loan without regard to the percentage of their ownership interests, if any. For example, an individual with a minority ownership or no ownership interest in the Applicant or OC who is critical to the operation of the business may be required to provide a personal guaranty (e.g., Supplemental Guarantors).\nIf a limited guaranty is used, the SBA Lender must choose one of the payment limitation options in SBA Form 148L (Unconditional Limited Guaranty) or, for 7(a) loans, equivalent Lender\u2019s form and specify the option in the SBA Terms and Conditions.\nThe SBA Lender must obtain a personal financial statement from all individuals guaranteeing the loan except for Supplemental Guarantors, dated within 90 days of loan approval.\nGuarantors must comply with the requirements in Ch. 1, Para. F, Citizenship and Residency Requirements.\nGuaranty of Spouse:\nEach spouse owning less than 20% of an Applicant must personally guarantee the loan in full when the combined ownership interest of both spouses and minor children is 20% or more.\nFor a non-owner spouse, the SBA Lender must require the signature of the spouse on the appropriate collateral documents. Non-owner spouses are not required to sign the personal financial statement. The spouse\u2019s guaranty secured by jointly held collateral will be limited to the spouse\u2019s interest in the collateral.\nGuarantors must comply with the requirements in Ch. 1, Para. F, Citizenship and Residency Requirements.\nCorporate/Other Guaranties:\nAll entities that have direct and/or indirect ownership of 20% or more of an Applicant must provide an unlimited full guaranty.\nWhen one or more trusts (revocable or irrevocable) own, in the aggregate, 20% or more of the applicant, each trust must provide an unlimited full guaranty. The trustee must execute the guaranty on behalf of the trust and provide the certifications required in Section A, Ch 2, Para. A.2., Conditions that apply when the EPC is owned in whole or in part by a trust. In addition, when a trust guaranty is required, the Trustor must also personally guarantee the loan. All donors to the trust will be deemed to have Trustor status for eligibility purposes.\nThe SBA Lender must obtain appropriate financial statements from all entities guaranteeing the loan in order to determine the assets available to support the guaranty.\nWhen deemed necessary for credit or other reasons, SBA or, for a loan processed on a delegated basis, the SBA Lender, may require other appropriate entities to provide full or limited guaranties of the loan without regard to the percentage of their ownership interests, if any. This may include entities who manage the day-to-day operations of the Applicant or OC through a Management Agreement without an ownership interest in the Applicant or OC.\nReducing Ownership Interest (Six-month lookback rule):\nAny Person (as defined in 13 CFR 120.10) subject to the guaranty requirements 6 months prior to the date of the loan application would continue to be subject to the requirements even if that Person has changed their ownership interest to less than 20%. Except for Ineligible Persons covered under Ch. 1, Para. F, Citizenship and Residency Requirements.\nExceptions to the 6-month lookback rule:\nWhen that Person completely divests their interest prior to the date of application. Complete divestiture includes divestiture of all ownership interest and severance of any relationship with the Applicant (and any associated Eligible Passive Company) in any capacity, including being an employee (paid or unpaid), for the life of the 7(a) or 504 loan.\nFor 7(a) loans for partial changes of ownership, the percentages of ownership for determining who must provide a guaranty will be based on the post-sale percentage of direct and/or indirect ownership in the business. See the appropriate sections in this SOP on partial changes of ownership for more information.",
+            "source_id": 1,
+            "source_version": "SOP 50 10 8.1",
+            "supports_conclusion": false,
+            "verified": true
+          },
           {
             "applicability_reason": "Lower-ranked passage excluded by the per-issue context limit.",
             "applicability_status": "applicable",
@@ -5665,48 +5672,20 @@
             "applied_conclusion": {
               "citations": [
                 {
-                  "application": "Since the combined ownership of the two trusts is 20%, they must both guarantee the loan.",
+                  "application": "Since the two trusts together own 20% of the applicant, they meet the threshold for requiring each trust to provide a full guaranty.",
                   "quote": "When one or more trusts (revocable or irrevocable) own, in the aggregate, 20% or more of the applicant, each trust must provide an unlimited full guaranty.",
                   "quote_id": 0,
                   "source_id": 1
                 }
               ],
-              "text": "The ownership percentages of the two trusts aggregate to meet the 20% threshold for guaranty requirements, necessitating that each trust provide an unlimited full guaranty."
+              "text": "The trusts' ownership percentages do aggregate for guaranty purposes, as their combined ownership exceeds 20%. Therefore, each trust must provide an unlimited full guaranty."
             },
-            "final_applied_conclusion": {
-              "arithmetic_valid": true,
-              "artifact_subquestion_id": "subquestion-1",
-              "citations": [
-                {
-                  "applicability_reason": null,
-                  "applicability_status": "applicable",
-                  "application": "Since the combined ownership of the two trusts is 20%, they must both guarantee the loan.",
-                  "condition_reason": null,
-                  "condition_result": "passed",
-                  "conditions": [],
-                  "effective_date": "2026-10-01",
-                  "page_number": 93,
-                  "program_scope": [
-                    "general"
-                  ],
-                  "quote": "When one or more trusts (revocable or irrevocable) own, in the aggregate, 20% or more of the applicant, each trust must provide an unlimited full guaranty.",
-                  "quote_located": true,
-                  "rejection_reason": null,
-                  "section_ref": "SBA 7(a) and 504 Business Loan Requirements > Section A. Core Requirements for all 7(a) and 504 Loans > Chapter 5: Other Core Requirements > Guaranties",
-                  "source_chunk": "13 CFR \u00a7 120.160(a)\nEach loan must be guaranteed by at least one individual or entity. If no one individual or entity is a direct and/or indirect owner of 20% or more of the Applicant, at least one of the owners must provide a full unconditional guaranty. In addition, if the guaranty will be provided by a trust, the requirements of Paragraph 3, Corporate/Other Guaranties below must be met.\nPersonal Guaranties:\nAny individual who has direct and/or indirect ownership of 20% or more of an Applicant must provide an unlimited full guaranty. (SBA Form 148 or, for 7(a) loans, equivalent Lender\u2019s form). If a person has executed the Note as a Borrower in an individual capacity, that person does not also have to execute a personal guaranty.\nWhen ownership interest of an Applicant is held by a corporation, partnership or other form of legal entity, the ownership interests of all individuals must be disclosed.\nWhen deemed necessary for credit or other reasons, SBA or, for a loan processed on a delegated basis, the SBA Lender, may require other appropriate individuals or entities to provide full or limited guaranties of the loan without regard to the percentage of their ownership interests, if any. For example, an individual with a minority ownership or no ownership interest in the Applicant or OC who is critical to the operation of the business may be required to provide a personal guaranty (e.g., Supplemental Guarantors).\nIf a limited guaranty is used, the SBA Lender must choose one of the payment limitation options in SBA Form 148L (Unconditional Limited Guaranty) or, for 7(a) loans, equivalent Lender\u2019s form and specify the option in the SBA Terms and Conditions.\nThe SBA Lender must obtain a personal financial statement from all individuals guaranteeing the loan except for Supplemental Guarantors, dated within 90 days of loan approval.\nGuarantors must comply with the requirements in Ch. 1, Para. F, Citizenship and Residency Requirements.\nGuaranty of Spouse:\nEach spouse owning less than 20% of an Applicant must personally guarantee the loan in full when the combined ownership interest of both spouses and minor children is 20% or more.\nFor a non-owner spouse, the SBA Lender must require the signature of the spouse on the appropriate collateral documents. Non-owner spouses are not required to sign the personal financial statement. The spouse\u2019s guaranty secured by jointly held collateral will be limited to the spouse\u2019s interest in the collateral.\nGuarantors must comply with the requirements in Ch. 1, Para. F, Citizenship and Residency Requirements.\nCorporate/Other Guaranties:\nAll entities that have direct and/or indirect ownership of 20% or more of an Applicant must provide an unlimited full guaranty.\nWhen one or more trusts (revocable or irrevocable) own, in the aggregate, 20% or more of the applicant, each trust must provide an unlimited full guaranty. The trustee must execute the guaranty on behalf of the trust and provide the certifications required in Section A, Ch 2, Para. A.2., Conditions that apply when the EPC is owned in whole or in part by a trust. In addition, when a trust guaranty is required, the Trustor must also personally guarantee the loan. All donors to the trust will be deemed to have Trustor status for eligibility purposes.\nThe SBA Lender must obtain appropriate financial statements from all entities guaranteeing the loan in order to determine the assets available to support the guaranty.\nWhen deemed necessary for credit or other reasons, SBA or, for a loan processed on a delegated basis, the SBA Lender, may require other appropriate entities to provide full or limited guaranties of the loan without regard to the percentage of their ownership interests, if any. This may include entities who manage the day-to-day operations of the Applicant or OC through a Management Agreement without an ownership interest in the Applicant or OC.\nReducing Ownership Interest (Six-month lookback rule):\nAny Person (as defined in 13 CFR 120.10) subject to the guaranty requirements 6 months prior to the date of the loan application would continue to be subject to the requirements even if that Person has changed their ownership interest to less than 20%. Except for Ineligible Persons covered under Ch. 1, Para. F, Citizenship and Residency Requirements.\nExceptions to the 6-month lookback rule:\nWhen that Person completely divests their interest prior to the date of application. Complete divestiture includes divestiture of all ownership interest and severance of any relationship with the Applicant (and any associated Eligible Passive Company) in any capacity, including being an employee (paid or unpaid), for the life of the 7(a) or 504 loan.\nFor 7(a) loans for partial changes of ownership, the percentages of ownership for determining who must provide a guaranty will be based on the post-sale percentage of direct and/or indirect ownership in the business. See the appropriate sections in this SOP on partial changes of ownership for more information.",
-                  "source_id": 1,
-                  "source_version": "SOP 50 10 8.1",
-                  "supports_conclusion": true,
-                  "verified": true
-                }
-              ],
-              "text": "The ownership percentages of the two trusts aggregate to meet the 20% threshold for guaranty requirements, necessitating that each trust provide an unlimited full guaranty.\n\nSupplied facts (quoted from your question): \u201cA 7(a) applicant is owned by two revocable trusts, one at 12% and one at 8%.\u201d. These stated facts are not a substitute for operative legal authority."
-            },
+            "final_applied_conclusion": null,
             "final_support_status": "supported",
             "guarantor_rows": [
               {
                 "additional_conditions": "",
-                "capacity": "owner",
+                "capacity": "Owner",
                 "citations": [
                   {
                     "quote": "When one or more trusts (revocable or irrevocable) own, in the aggregate, 20% or more of the applicant, each trust must provide an unlimited full guaranty.",
@@ -5718,11 +5697,11 @@
                 "ownership_percentage": 12,
                 "party": "Trust 1",
                 "status": "required",
-                "triggering_provision": "must provide an unlimited full guaranty"
+                "triggering_provision": "each trust must provide an unlimited full guaranty"
               },
               {
                 "additional_conditions": "",
-                "capacity": "owner",
+                "capacity": "Owner",
                 "citations": [
                   {
                     "quote": "When one or more trusts (revocable or irrevocable) own, in the aggregate, 20% or more of the applicant, each trust must provide an unlimited full guaranty.",
@@ -5734,7 +5713,7 @@
                 "ownership_percentage": 8,
                 "party": "Trust 2",
                 "status": "required",
-                "triggering_provision": "must provide an unlimited full guaranty"
+                "triggering_provision": "each trust must provide an unlimited full guaranty"
               }
             ],
             "other_issues": [],
@@ -5749,6 +5728,7 @@
                 "text": "When one or more trusts own, in the aggregate, 20% or more of the applicant, each trust must provide an unlimited full guaranty."
               }
             ],
+            "source_role_applications": {},
             "stated_facts": [
               "A 7(a) applicant is owned by two revocable trusts, one at 12% and one at 8%."
             ]
@@ -5759,7 +5739,7 @@
         "unresolved_reason": null
       },
       {
-        "answer": "Both trusts must provide an unlimited full guaranty, and the trustee must sign on behalf of each trust.\n\nWhen one or more trusts own, in the aggregate, 20% or more of the applicant, each trust must provide an unlimited full guaranty.\n\nThe trustee must execute the guaranty on behalf of the trust.\n\nSupplied facts (quoted from your question): \u201cA 7(a) applicant is owned by two revocable trusts, one at 12% and one at 8%.\u201d. These stated facts are not a substitute for operative legal authority.",
+        "answer": "The trusts must provide an unlimited full guaranty due to their combined ownership of 20% of the applicant, and the trustee must execute the guaranty on behalf of each trust. The trustee must execute the guaranty on behalf of the trust, ensuring that the trust's obligations are formally recognized in the loan agreement. The Trustor must also personally guarantee the loan, which adds an additional layer of security for the lender.\n\nWhen one or more trusts (revocable or irrevocable) own, in the aggregate, 20% or more of the applicant, each trust must provide an unlimited full guaranty.\n\nThe trustee must execute the guaranty on behalf of the trust and provide the certifications required in Section A, Ch 2, Para. A.2., Conditions that apply when the EPC is owned in whole or in part by a trust.\n\nIn addition, when a trust guaranty is required, the Trustor must also personally guarantee the loan.\n\nSupplied facts (quoted from your question): \u201cA 7(a) applicant is owned by two revocable trusts, one at 12% and one at 8%.\u201d. These stated facts are not a substitute for operative legal authority.",
         "applied_conclusion": {
           "arithmetic_valid": true,
           "artifact_subquestion_id": "subquestion-2",
@@ -5767,7 +5747,7 @@
             {
               "applicability_reason": null,
               "applicability_status": "applicable",
-              "application": "Since the combined ownership of the trusts is 20%, each trust is required to provide a guaranty.",
+              "application": "The trusts must provide an unlimited full guaranty due to their combined ownership of 20% of the applicant, and the trustee must execute the guaranty on behalf of each trust.",
               "condition_reason": null,
               "condition_result": "passed",
               "conditions": [],
@@ -5789,7 +5769,7 @@
             {
               "applicability_reason": null,
               "applicability_status": "applicable",
-              "application": "The trustee's signature is necessary to execute the guaranty for the trust.",
+              "application": "The trusts must provide an unlimited full guaranty due to their combined ownership of 20% of the applicant, and the trustee must execute the guaranty on behalf of each trust.",
               "condition_reason": null,
               "condition_result": "passed",
               "conditions": [],
@@ -5798,7 +5778,95 @@
               "program_scope": [
                 "general"
               ],
-              "quote": "The trustee must execute the guaranty on behalf of the trust and provide the certifications required in Section A, Ch 2, Para.",
+              "quote": "When one or more trusts (revocable or irrevocable) own, in the aggregate, 20% or more of the applicant, each trust must provide an unlimited full guaranty.",
+              "quote_located": true,
+              "rejection_reason": null,
+              "section_ref": "SBA 7(a) and 504 Business Loan Requirements > Section A. Core Requirements for all 7(a) and 504 Loans > Chapter 5: Other Core Requirements > Guaranties",
+              "source_chunk": "13 CFR \u00a7 120.160(a)\nEach loan must be guaranteed by at least one individual or entity. If no one individual or entity is a direct and/or indirect owner of 20% or more of the Applicant, at least one of the owners must provide a full unconditional guaranty. In addition, if the guaranty will be provided by a trust, the requirements of Paragraph 3, Corporate/Other Guaranties below must be met.\nPersonal Guaranties:\nAny individual who has direct and/or indirect ownership of 20% or more of an Applicant must provide an unlimited full guaranty. (SBA Form 148 or, for 7(a) loans, equivalent Lender\u2019s form). If a person has executed the Note as a Borrower in an individual capacity, that person does not also have to execute a personal guaranty.\nWhen ownership interest of an Applicant is held by a corporation, partnership or other form of legal entity, the ownership interests of all individuals must be disclosed.\nWhen deemed necessary for credit or other reasons, SBA or, for a loan processed on a delegated basis, the SBA Lender, may require other appropriate individuals or entities to provide full or limited guaranties of the loan without regard to the percentage of their ownership interests, if any. For example, an individual with a minority ownership or no ownership interest in the Applicant or OC who is critical to the operation of the business may be required to provide a personal guaranty (e.g., Supplemental Guarantors).\nIf a limited guaranty is used, the SBA Lender must choose one of the payment limitation options in SBA Form 148L (Unconditional Limited Guaranty) or, for 7(a) loans, equivalent Lender\u2019s form and specify the option in the SBA Terms and Conditions.\nThe SBA Lender must obtain a personal financial statement from all individuals guaranteeing the loan except for Supplemental Guarantors, dated within 90 days of loan approval.\nGuarantors must comply with the requirements in Ch. 1, Para. F, Citizenship and Residency Requirements.\nGuaranty of Spouse:\nEach spouse owning less than 20% of an Applicant must personally guarantee the loan in full when the combined ownership interest of both spouses and minor children is 20% or more.\nFor a non-owner spouse, the SBA Lender must require the signature of the spouse on the appropriate collateral documents. Non-owner spouses are not required to sign the personal financial statement. The spouse\u2019s guaranty secured by jointly held collateral will be limited to the spouse\u2019s interest in the collateral.\nGuarantors must comply with the requirements in Ch. 1, Para. F, Citizenship and Residency Requirements.\nCorporate/Other Guaranties:\nAll entities that have direct and/or indirect ownership of 20% or more of an Applicant must provide an unlimited full guaranty.\nWhen one or more trusts (revocable or irrevocable) own, in the aggregate, 20% or more of the applicant, each trust must provide an unlimited full guaranty. The trustee must execute the guaranty on behalf of the trust and provide the certifications required in Section A, Ch 2, Para. A.2., Conditions that apply when the EPC is owned in whole or in part by a trust. In addition, when a trust guaranty is required, the Trustor must also personally guarantee the loan. All donors to the trust will be deemed to have Trustor status for eligibility purposes.\nThe SBA Lender must obtain appropriate financial statements from all entities guaranteeing the loan in order to determine the assets available to support the guaranty.\nWhen deemed necessary for credit or other reasons, SBA or, for a loan processed on a delegated basis, the SBA Lender, may require other appropriate entities to provide full or limited guaranties of the loan without regard to the percentage of their ownership interests, if any. This may include entities who manage the day-to-day operations of the Applicant or OC through a Management Agreement without an ownership interest in the Applicant or OC.\nReducing Ownership Interest (Six-month lookback rule):\nAny Person (as defined in 13 CFR 120.10) subject to the guaranty requirements 6 months prior to the date of the loan application would continue to be subject to the requirements even if that Person has changed their ownership interest to less than 20%. Except for Ineligible Persons covered under Ch. 1, Para. F, Citizenship and Residency Requirements.\nExceptions to the 6-month lookback rule:\nWhen that Person completely divests their interest prior to the date of application. Complete divestiture includes divestiture of all ownership interest and severance of any relationship with the Applicant (and any associated Eligible Passive Company) in any capacity, including being an employee (paid or unpaid), for the life of the 7(a) or 504 loan.\nFor 7(a) loans for partial changes of ownership, the percentages of ownership for determining who must provide a guaranty will be based on the post-sale percentage of direct and/or indirect ownership in the business. See the appropriate sections in this SOP on partial changes of ownership for more information.",
+              "source_id": 1,
+              "source_version": "SOP 50 10 8.1",
+              "supports_conclusion": true,
+              "verified": true
+            },
+            {
+              "applicability_reason": null,
+              "applicability_status": "applicable",
+              "application": "The trustee must execute the guaranty on behalf of the trust, ensuring that the trust's obligations are formally recognized in the loan agreement.",
+              "condition_reason": null,
+              "condition_result": "passed",
+              "conditions": [],
+              "effective_date": "2026-10-01",
+              "page_number": 93,
+              "program_scope": [
+                "general"
+              ],
+              "quote": "The trustee must execute the guaranty on behalf of the trust and provide the certifications required in Section A, Ch 2, Para. A.2., Conditions that apply when the EPC is owned in whole or in part by a trust.",
+              "quote_located": true,
+              "rejection_reason": null,
+              "section_ref": "SBA 7(a) and 504 Business Loan Requirements > Section A. Core Requirements for all 7(a) and 504 Loans > Chapter 5: Other Core Requirements > Guaranties",
+              "source_chunk": "13 CFR \u00a7 120.160(a)\nEach loan must be guaranteed by at least one individual or entity. If no one individual or entity is a direct and/or indirect owner of 20% or more of the Applicant, at least one of the owners must provide a full unconditional guaranty. In addition, if the guaranty will be provided by a trust, the requirements of Paragraph 3, Corporate/Other Guaranties below must be met.\nPersonal Guaranties:\nAny individual who has direct and/or indirect ownership of 20% or more of an Applicant must provide an unlimited full guaranty. (SBA Form 148 or, for 7(a) loans, equivalent Lender\u2019s form). If a person has executed the Note as a Borrower in an individual capacity, that person does not also have to execute a personal guaranty.\nWhen ownership interest of an Applicant is held by a corporation, partnership or other form of legal entity, the ownership interests of all individuals must be disclosed.\nWhen deemed necessary for credit or other reasons, SBA or, for a loan processed on a delegated basis, the SBA Lender, may require other appropriate individuals or entities to provide full or limited guaranties of the loan without regard to the percentage of their ownership interests, if any. For example, an individual with a minority ownership or no ownership interest in the Applicant or OC who is critical to the operation of the business may be required to provide a personal guaranty (e.g., Supplemental Guarantors).\nIf a limited guaranty is used, the SBA Lender must choose one of the payment limitation options in SBA Form 148L (Unconditional Limited Guaranty) or, for 7(a) loans, equivalent Lender\u2019s form and specify the option in the SBA Terms and Conditions.\nThe SBA Lender must obtain a personal financial statement from all individuals guaranteeing the loan except for Supplemental Guarantors, dated within 90 days of loan approval.\nGuarantors must comply with the requirements in Ch. 1, Para. F, Citizenship and Residency Requirements.\nGuaranty of Spouse:\nEach spouse owning less than 20% of an Applicant must personally guarantee the loan in full when the combined ownership interest of both spouses and minor children is 20% or more.\nFor a non-owner spouse, the SBA Lender must require the signature of the spouse on the appropriate collateral documents. Non-owner spouses are not required to sign the personal financial statement. The spouse\u2019s guaranty secured by jointly held collateral will be limited to the spouse\u2019s interest in the collateral.\nGuarantors must comply with the requirements in Ch. 1, Para. F, Citizenship and Residency Requirements.\nCorporate/Other Guaranties:\nAll entities that have direct and/or indirect ownership of 20% or more of an Applicant must provide an unlimited full guaranty.\nWhen one or more trusts (revocable or irrevocable) own, in the aggregate, 20% or more of the applicant, each trust must provide an unlimited full guaranty. The trustee must execute the guaranty on behalf of the trust and provide the certifications required in Section A, Ch 2, Para. A.2., Conditions that apply when the EPC is owned in whole or in part by a trust. In addition, when a trust guaranty is required, the Trustor must also personally guarantee the loan. All donors to the trust will be deemed to have Trustor status for eligibility purposes.\nThe SBA Lender must obtain appropriate financial statements from all entities guaranteeing the loan in order to determine the assets available to support the guaranty.\nWhen deemed necessary for credit or other reasons, SBA or, for a loan processed on a delegated basis, the SBA Lender, may require other appropriate entities to provide full or limited guaranties of the loan without regard to the percentage of their ownership interests, if any. This may include entities who manage the day-to-day operations of the Applicant or OC through a Management Agreement without an ownership interest in the Applicant or OC.\nReducing Ownership Interest (Six-month lookback rule):\nAny Person (as defined in 13 CFR 120.10) subject to the guaranty requirements 6 months prior to the date of the loan application would continue to be subject to the requirements even if that Person has changed their ownership interest to less than 20%. Except for Ineligible Persons covered under Ch. 1, Para. F, Citizenship and Residency Requirements.\nExceptions to the 6-month lookback rule:\nWhen that Person completely divests their interest prior to the date of application. Complete divestiture includes divestiture of all ownership interest and severance of any relationship with the Applicant (and any associated Eligible Passive Company) in any capacity, including being an employee (paid or unpaid), for the life of the 7(a) or 504 loan.\nFor 7(a) loans for partial changes of ownership, the percentages of ownership for determining who must provide a guaranty will be based on the post-sale percentage of direct and/or indirect ownership in the business. See the appropriate sections in this SOP on partial changes of ownership for more information.",
+              "source_id": 1,
+              "source_version": "SOP 50 10 8.1",
+              "supports_conclusion": true,
+              "verified": true
+            },
+            {
+              "applicability_reason": null,
+              "applicability_status": "applicable",
+              "application": "The trustee must execute the guaranty on behalf of the trust, ensuring that the trust's obligations are formally recognized in the loan agreement.",
+              "condition_reason": null,
+              "condition_result": "passed",
+              "conditions": [],
+              "effective_date": "2026-10-01",
+              "page_number": 93,
+              "program_scope": [
+                "general"
+              ],
+              "quote": "The trustee must execute the guaranty on behalf of the trust and provide the certifications required in Section A, Ch 2, Para. A.2., Conditions that apply when the EPC is owned in whole or in part by a trust.",
+              "quote_located": true,
+              "rejection_reason": null,
+              "section_ref": "SBA 7(a) and 504 Business Loan Requirements > Section A. Core Requirements for all 7(a) and 504 Loans > Chapter 5: Other Core Requirements > Guaranties",
+              "source_chunk": "13 CFR \u00a7 120.160(a)\nEach loan must be guaranteed by at least one individual or entity. If no one individual or entity is a direct and/or indirect owner of 20% or more of the Applicant, at least one of the owners must provide a full unconditional guaranty. In addition, if the guaranty will be provided by a trust, the requirements of Paragraph 3, Corporate/Other Guaranties below must be met.\nPersonal Guaranties:\nAny individual who has direct and/or indirect ownership of 20% or more of an Applicant must provide an unlimited full guaranty. (SBA Form 148 or, for 7(a) loans, equivalent Lender\u2019s form). If a person has executed the Note as a Borrower in an individual capacity, that person does not also have to execute a personal guaranty.\nWhen ownership interest of an Applicant is held by a corporation, partnership or other form of legal entity, the ownership interests of all individuals must be disclosed.\nWhen deemed necessary for credit or other reasons, SBA or, for a loan processed on a delegated basis, the SBA Lender, may require other appropriate individuals or entities to provide full or limited guaranties of the loan without regard to the percentage of their ownership interests, if any. For example, an individual with a minority ownership or no ownership interest in the Applicant or OC who is critical to the operation of the business may be required to provide a personal guaranty (e.g., Supplemental Guarantors).\nIf a limited guaranty is used, the SBA Lender must choose one of the payment limitation options in SBA Form 148L (Unconditional Limited Guaranty) or, for 7(a) loans, equivalent Lender\u2019s form and specify the option in the SBA Terms and Conditions.\nThe SBA Lender must obtain a personal financial statement from all individuals guaranteeing the loan except for Supplemental Guarantors, dated within 90 days of loan approval.\nGuarantors must comply with the requirements in Ch. 1, Para. F, Citizenship and Residency Requirements.\nGuaranty of Spouse:\nEach spouse owning less than 20% of an Applicant must personally guarantee the loan in full when the combined ownership interest of both spouses and minor children is 20% or more.\nFor a non-owner spouse, the SBA Lender must require the signature of the spouse on the appropriate collateral documents. Non-owner spouses are not required to sign the personal financial statement. The spouse\u2019s guaranty secured by jointly held collateral will be limited to the spouse\u2019s interest in the collateral.\nGuarantors must comply with the requirements in Ch. 1, Para. F, Citizenship and Residency Requirements.\nCorporate/Other Guaranties:\nAll entities that have direct and/or indirect ownership of 20% or more of an Applicant must provide an unlimited full guaranty.\nWhen one or more trusts (revocable or irrevocable) own, in the aggregate, 20% or more of the applicant, each trust must provide an unlimited full guaranty. The trustee must execute the guaranty on behalf of the trust and provide the certifications required in Section A, Ch 2, Para. A.2., Conditions that apply when the EPC is owned in whole or in part by a trust. In addition, when a trust guaranty is required, the Trustor must also personally guarantee the loan. All donors to the trust will be deemed to have Trustor status for eligibility purposes.\nThe SBA Lender must obtain appropriate financial statements from all entities guaranteeing the loan in order to determine the assets available to support the guaranty.\nWhen deemed necessary for credit or other reasons, SBA or, for a loan processed on a delegated basis, the SBA Lender, may require other appropriate entities to provide full or limited guaranties of the loan without regard to the percentage of their ownership interests, if any. This may include entities who manage the day-to-day operations of the Applicant or OC through a Management Agreement without an ownership interest in the Applicant or OC.\nReducing Ownership Interest (Six-month lookback rule):\nAny Person (as defined in 13 CFR 120.10) subject to the guaranty requirements 6 months prior to the date of the loan application would continue to be subject to the requirements even if that Person has changed their ownership interest to less than 20%. Except for Ineligible Persons covered under Ch. 1, Para. F, Citizenship and Residency Requirements.\nExceptions to the 6-month lookback rule:\nWhen that Person completely divests their interest prior to the date of application. Complete divestiture includes divestiture of all ownership interest and severance of any relationship with the Applicant (and any associated Eligible Passive Company) in any capacity, including being an employee (paid or unpaid), for the life of the 7(a) or 504 loan.\nFor 7(a) loans for partial changes of ownership, the percentages of ownership for determining who must provide a guaranty will be based on the post-sale percentage of direct and/or indirect ownership in the business. See the appropriate sections in this SOP on partial changes of ownership for more information.",
+              "source_id": 1,
+              "source_version": "SOP 50 10 8.1",
+              "supports_conclusion": true,
+              "verified": true
+            },
+            {
+              "applicability_reason": null,
+              "applicability_status": "applicable",
+              "application": "The Trustor must also personally guarantee the loan, which adds an additional layer of security for the lender.",
+              "condition_reason": null,
+              "condition_result": "passed",
+              "conditions": [],
+              "effective_date": "2026-10-01",
+              "page_number": 93,
+              "program_scope": [
+                "general"
+              ],
+              "quote": "In addition, when a trust guaranty is required, the Trustor must also personally guarantee the loan.",
+              "quote_located": true,
+              "rejection_reason": null,
+              "section_ref": "SBA 7(a) and 504 Business Loan Requirements > Section A. Core Requirements for all 7(a) and 504 Loans > Chapter 5: Other Core Requirements > Guaranties",
+              "source_chunk": "13 CFR \u00a7 120.160(a)\nEach loan must be guaranteed by at least one individual or entity. If no one individual or entity is a direct and/or indirect owner of 20% or more of the Applicant, at least one of the owners must provide a full unconditional guaranty. In addition, if the guaranty will be provided by a trust, the requirements of Paragraph 3, Corporate/Other Guaranties below must be met.\nPersonal Guaranties:\nAny individual who has direct and/or indirect ownership of 20% or more of an Applicant must provide an unlimited full guaranty. (SBA Form 148 or, for 7(a) loans, equivalent Lender\u2019s form). If a person has executed the Note as a Borrower in an individual capacity, that person does not also have to execute a personal guaranty.\nWhen ownership interest of an Applicant is held by a corporation, partnership or other form of legal entity, the ownership interests of all individuals must be disclosed.\nWhen deemed necessary for credit or other reasons, SBA or, for a loan processed on a delegated basis, the SBA Lender, may require other appropriate individuals or entities to provide full or limited guaranties of the loan without regard to the percentage of their ownership interests, if any. For example, an individual with a minority ownership or no ownership interest in the Applicant or OC who is critical to the operation of the business may be required to provide a personal guaranty (e.g., Supplemental Guarantors).\nIf a limited guaranty is used, the SBA Lender must choose one of the payment limitation options in SBA Form 148L (Unconditional Limited Guaranty) or, for 7(a) loans, equivalent Lender\u2019s form and specify the option in the SBA Terms and Conditions.\nThe SBA Lender must obtain a personal financial statement from all individuals guaranteeing the loan except for Supplemental Guarantors, dated within 90 days of loan approval.\nGuarantors must comply with the requirements in Ch. 1, Para. F, Citizenship and Residency Requirements.\nGuaranty of Spouse:\nEach spouse owning less than 20% of an Applicant must personally guarantee the loan in full when the combined ownership interest of both spouses and minor children is 20% or more.\nFor a non-owner spouse, the SBA Lender must require the signature of the spouse on the appropriate collateral documents. Non-owner spouses are not required to sign the personal financial statement. The spouse\u2019s guaranty secured by jointly held collateral will be limited to the spouse\u2019s interest in the collateral.\nGuarantors must comply with the requirements in Ch. 1, Para. F, Citizenship and Residency Requirements.\nCorporate/Other Guaranties:\nAll entities that have direct and/or indirect ownership of 20% or more of an Applicant must provide an unlimited full guaranty.\nWhen one or more trusts (revocable or irrevocable) own, in the aggregate, 20% or more of the applicant, each trust must provide an unlimited full guaranty. The trustee must execute the guaranty on behalf of the trust and provide the certifications required in Section A, Ch 2, Para. A.2., Conditions that apply when the EPC is owned in whole or in part by a trust. In addition, when a trust guaranty is required, the Trustor must also personally guarantee the loan. All donors to the trust will be deemed to have Trustor status for eligibility purposes.\nThe SBA Lender must obtain appropriate financial statements from all entities guaranteeing the loan in order to determine the assets available to support the guaranty.\nWhen deemed necessary for credit or other reasons, SBA or, for a loan processed on a delegated basis, the SBA Lender, may require other appropriate entities to provide full or limited guaranties of the loan without regard to the percentage of their ownership interests, if any. This may include entities who manage the day-to-day operations of the Applicant or OC through a Management Agreement without an ownership interest in the Applicant or OC.\nReducing Ownership Interest (Six-month lookback rule):\nAny Person (as defined in 13 CFR 120.10) subject to the guaranty requirements 6 months prior to the date of the loan application would continue to be subject to the requirements even if that Person has changed their ownership interest to less than 20%. Except for Ineligible Persons covered under Ch. 1, Para. F, Citizenship and Residency Requirements.\nExceptions to the 6-month lookback rule:\nWhen that Person completely divests their interest prior to the date of application. Complete divestiture includes divestiture of all ownership interest and severance of any relationship with the Applicant (and any associated Eligible Passive Company) in any capacity, including being an employee (paid or unpaid), for the life of the 7(a) or 504 loan.\nFor 7(a) loans for partial changes of ownership, the percentages of ownership for determining who must provide a guaranty will be based on the post-sale percentage of direct and/or indirect ownership in the business. See the appropriate sections in this SOP on partial changes of ownership for more information.",
+              "source_id": 1,
+              "source_version": "SOP 50 10 8.1",
+              "supports_conclusion": true,
+              "verified": true
+            },
+            {
+              "applicability_reason": null,
+              "applicability_status": "applicable",
+              "application": "The Trustor must also personally guarantee the loan, which adds an additional layer of security for the lender.",
+              "condition_reason": null,
+              "condition_result": "passed",
+              "conditions": [],
+              "effective_date": "2026-10-01",
+              "page_number": 93,
+              "program_scope": [
+                "general"
+              ],
+              "quote": "In addition, when a trust guaranty is required, the Trustor must also personally guarantee the loan.",
               "quote_located": true,
               "rejection_reason": null,
               "section_ref": "SBA 7(a) and 504 Business Loan Requirements > Section A. Core Requirements for all 7(a) and 504 Loans > Chapter 5: Other Core Requirements > Guaranties",
@@ -5809,7 +5877,7 @@
               "verified": true
             }
           ],
-          "text": "Both trusts must provide an unlimited full guaranty, and the trustee must sign on behalf of each trust.\n\nSupplied facts (quoted from your question): \u201cA 7(a) applicant is owned by two revocable trusts, one at 12% and one at 8%.\u201d. These stated facts are not a substitute for operative legal authority."
+          "text": "The trusts must provide an unlimited full guaranty due to their combined ownership of 20% of the applicant, and the trustee must execute the guaranty on behalf of each trust. The trustee must execute the guaranty on behalf of the trust, ensuring that the trust's obligations are formally recognized in the loan agreement. The Trustor must also personally guarantee the loan, which adds an additional layer of security for the lender.\n\nSupplied facts (quoted from your question): \u201cA 7(a) applicant is owned by two revocable trusts, one at 12% and one at 8%.\u201d. These stated facts are not a substitute for operative legal authority."
         },
         "gate_telemetry": [
           {
@@ -6676,6 +6744,60 @@
             }
           },
           {
+            "applicability_reason": "program scopes mismatch: provision governs 504 authority; the facts indicate 7(a) authority",
+            "applicability_result": "failed",
+            "breadcrumb": "SBA 7(a) and 504 Business Loan Requirements > Section C. 504 Loan Program Specific Requirements > Chapter 1: Eligibility through Submission of Application > Eligible Uses of Proceeds > Change of Ownership",
+            "chunk_id": 216,
+            "condition_reason": null,
+            "condition_result": "passed",
+            "condition_scope": "source",
+            "conditions": [],
+            "excluded_dimension": "program_scopes",
+            "fact_pattern": {
+              "entity_structures": [],
+              "loan_size_bands": [],
+              "party_roles": [],
+              "product_lines": [
+                "standard_7a"
+              ],
+              "program_scopes": [
+                "7a"
+              ],
+              "transaction_types": []
+            },
+            "fact_values": {
+              "entity_structures": [],
+              "loan_size_bands": [],
+              "party_roles": [],
+              "product_lines": [
+                "standard_7a"
+              ],
+              "program_scopes": [
+                "7a"
+              ],
+              "transaction_types": []
+            },
+            "page": 228,
+            "reached_applied_conclusion": true,
+            "result": "excluded",
+            "source_id": 50,
+            "subquestion_id": "subquestion-2",
+            "tags": {
+              "entity_structures": [],
+              "loan_size_bands": [],
+              "party_roles": [],
+              "product_lines": [
+                "504"
+              ],
+              "program_scopes": [
+                "504"
+              ],
+              "transaction_types": [
+                "change_of_ownership"
+              ]
+            }
+          },
+          {
             "applicability_reason": null,
             "applicability_result": "passed",
             "breadcrumb": "SBA 7(a) and 504 Business Loan Requirements > Section B. 7(a) Loan Program Specific Requirements > Chapter 1: Standard 7(a) Loans (Loans greater than $350,000) > Credit Standards > Collateral",
@@ -6738,60 +6860,6 @@
                 "7a"
               ],
               "transaction_types": []
-            }
-          },
-          {
-            "applicability_reason": "program scopes mismatch: provision governs 504 authority; the facts indicate 7(a) authority",
-            "applicability_result": "failed",
-            "breadcrumb": "SBA 7(a) and 504 Business Loan Requirements > Section C. 504 Loan Program Specific Requirements > Chapter 1: Eligibility through Submission of Application > Eligible Uses of Proceeds > Change of Ownership",
-            "chunk_id": 216,
-            "condition_reason": null,
-            "condition_result": "passed",
-            "condition_scope": "source",
-            "conditions": [],
-            "excluded_dimension": "program_scopes",
-            "fact_pattern": {
-              "entity_structures": [],
-              "loan_size_bands": [],
-              "party_roles": [],
-              "product_lines": [
-                "standard_7a"
-              ],
-              "program_scopes": [
-                "7a"
-              ],
-              "transaction_types": []
-            },
-            "fact_values": {
-              "entity_structures": [],
-              "loan_size_bands": [],
-              "party_roles": [],
-              "product_lines": [
-                "standard_7a"
-              ],
-              "program_scopes": [
-                "7a"
-              ],
-              "transaction_types": []
-            },
-            "page": 228,
-            "reached_applied_conclusion": true,
-            "result": "excluded",
-            "source_id": 50,
-            "subquestion_id": "subquestion-2",
-            "tags": {
-              "entity_structures": [],
-              "loan_size_bands": [],
-              "party_roles": [],
-              "product_lines": [
-                "504"
-              ],
-              "program_scopes": [
-                "504"
-              ],
-              "transaction_types": [
-                "change_of_ownership"
-              ]
             }
           },
           {
@@ -8293,7 +8361,7 @@
                 "verified": true
               }
             ],
-            "text": "When one or more trusts own, in the aggregate, 20% or more of the applicant, each trust must provide an unlimited full guaranty."
+            "text": "When one or more trusts (revocable or irrevocable) own, in the aggregate, 20% or more of the applicant, each trust must provide an unlimited full guaranty."
           },
           {
             "arithmetic_valid": true,
@@ -8311,7 +8379,7 @@
                 "program_scope": [
                   "general"
                 ],
-                "quote": "The trustee must execute the guaranty on behalf of the trust and provide the certifications required in Section A, Ch 2, Para.",
+                "quote": "The trustee must execute the guaranty on behalf of the trust and provide the certifications required in Section A, Ch 2, Para. A.2., Conditions that apply when the EPC is owned in whole or in part by a trust.",
                 "quote_located": true,
                 "rejection_reason": null,
                 "section_ref": "SBA 7(a) and 504 Business Loan Requirements > Section A. Core Requirements for all 7(a) and 504 Loans > Chapter 5: Other Core Requirements > Guaranties",
@@ -8322,7 +8390,36 @@
                 "verified": true
               }
             ],
-            "text": "The trustee must execute the guaranty on behalf of the trust."
+            "text": "The trustee must execute the guaranty on behalf of the trust and provide the certifications required in Section A, Ch 2, Para. A.2., Conditions that apply when the EPC is owned in whole or in part by a trust."
+          },
+          {
+            "arithmetic_valid": true,
+            "artifact_subquestion_id": "subquestion-2",
+            "citations": [
+              {
+                "applicability_reason": null,
+                "applicability_status": "applicable",
+                "application": null,
+                "condition_reason": null,
+                "condition_result": "passed",
+                "conditions": [],
+                "effective_date": "2026-10-01",
+                "page_number": 93,
+                "program_scope": [
+                  "general"
+                ],
+                "quote": "In addition, when a trust guaranty is required, the Trustor must also personally guarantee the loan.",
+                "quote_located": true,
+                "rejection_reason": null,
+                "section_ref": "SBA 7(a) and 504 Business Loan Requirements > Section A. Core Requirements for all 7(a) and 504 Loans > Chapter 5: Other Core Requirements > Guaranties",
+                "source_chunk": "13 CFR \u00a7 120.160(a)\nEach loan must be guaranteed by at least one individual or entity. If no one individual or entity is a direct and/or indirect owner of 20% or more of the Applicant, at least one of the owners must provide a full unconditional guaranty. In addition, if the guaranty will be provided by a trust, the requirements of Paragraph 3, Corporate/Other Guaranties below must be met.\nPersonal Guaranties:\nAny individual who has direct and/or indirect ownership of 20% or more of an Applicant must provide an unlimited full guaranty. (SBA Form 148 or, for 7(a) loans, equivalent Lender\u2019s form). If a person has executed the Note as a Borrower in an individual capacity, that person does not also have to execute a personal guaranty.\nWhen ownership interest of an Applicant is held by a corporation, partnership or other form of legal entity, the ownership interests of all individuals must be disclosed.\nWhen deemed necessary for credit or other reasons, SBA or, for a loan processed on a delegated basis, the SBA Lender, may require other appropriate individuals or entities to provide full or limited guaranties of the loan without regard to the percentage of their ownership interests, if any. For example, an individual with a minority ownership or no ownership interest in the Applicant or OC who is critical to the operation of the business may be required to provide a personal guaranty (e.g., Supplemental Guarantors).\nIf a limited guaranty is used, the SBA Lender must choose one of the payment limitation options in SBA Form 148L (Unconditional Limited Guaranty) or, for 7(a) loans, equivalent Lender\u2019s form and specify the option in the SBA Terms and Conditions.\nThe SBA Lender must obtain a personal financial statement from all individuals guaranteeing the loan except for Supplemental Guarantors, dated within 90 days of loan approval.\nGuarantors must comply with the requirements in Ch. 1, Para. F, Citizenship and Residency Requirements.\nGuaranty of Spouse:\nEach spouse owning less than 20% of an Applicant must personally guarantee the loan in full when the combined ownership interest of both spouses and minor children is 20% or more.\nFor a non-owner spouse, the SBA Lender must require the signature of the spouse on the appropriate collateral documents. Non-owner spouses are not required to sign the personal financial statement. The spouse\u2019s guaranty secured by jointly held collateral will be limited to the spouse\u2019s interest in the collateral.\nGuarantors must comply with the requirements in Ch. 1, Para. F, Citizenship and Residency Requirements.\nCorporate/Other Guaranties:\nAll entities that have direct and/or indirect ownership of 20% or more of an Applicant must provide an unlimited full guaranty.\nWhen one or more trusts (revocable or irrevocable) own, in the aggregate, 20% or more of the applicant, each trust must provide an unlimited full guaranty. The trustee must execute the guaranty on behalf of the trust and provide the certifications required in Section A, Ch 2, Para. A.2., Conditions that apply when the EPC is owned in whole or in part by a trust. In addition, when a trust guaranty is required, the Trustor must also personally guarantee the loan. All donors to the trust will be deemed to have Trustor status for eligibility purposes.\nThe SBA Lender must obtain appropriate financial statements from all entities guaranteeing the loan in order to determine the assets available to support the guaranty.\nWhen deemed necessary for credit or other reasons, SBA or, for a loan processed on a delegated basis, the SBA Lender, may require other appropriate entities to provide full or limited guaranties of the loan without regard to the percentage of their ownership interests, if any. This may include entities who manage the day-to-day operations of the Applicant or OC through a Management Agreement without an ownership interest in the Applicant or OC.\nReducing Ownership Interest (Six-month lookback rule):\nAny Person (as defined in 13 CFR 120.10) subject to the guaranty requirements 6 months prior to the date of the loan application would continue to be subject to the requirements even if that Person has changed their ownership interest to less than 20%. Except for Ineligible Persons covered under Ch. 1, Para. F, Citizenship and Residency Requirements.\nExceptions to the 6-month lookback rule:\nWhen that Person completely divests their interest prior to the date of application. Complete divestiture includes divestiture of all ownership interest and severance of any relationship with the Applicant (and any associated Eligible Passive Company) in any capacity, including being an employee (paid or unpaid), for the life of the 7(a) or 504 loan.\nFor 7(a) loans for partial changes of ownership, the percentages of ownership for determining who must provide a guaranty will be based on the post-sale percentage of direct and/or indirect ownership in the business. See the appropriate sections in this SOP on partial changes of ownership for more information.",
+                "source_id": 1,
+                "source_version": "SOP 50 10 8.1",
+                "supports_conclusion": true,
+                "verified": true
+              }
+            ],
+            "text": "In addition, when a trust guaranty is required, the Trustor must also personally guarantee the loan."
           }
         ],
         "question": "Policy issue: When one or more trusts (revocable or irrevocable) own, in the aggregate, 20% or more of the applicant, each trust must provide an unlimited full guaranty. The trustee must execute the guaranty on behalf of the trust and provide the certifications required in Section A, Ch 2, Para. A.2., Conditions that apply when the EPC is owned in whole or in part by a trust. In addition, when a trust guaranty is required, the Trustor must also personally guarantee the loan.",
@@ -9467,19 +9564,43 @@
             "applied_conclusion": {
               "citations": [
                 {
-                  "application": "Since the combined ownership of the trusts is 20%, each trust is required to provide a guaranty.",
+                  "application": "The trusts must provide an unlimited full guaranty due to their combined ownership of 20% of the applicant, and the trustee must execute the guaranty on behalf of each trust.",
                   "quote": "When one or more trusts (revocable or irrevocable) own, in the aggregate, 20% or more of the applicant, each trust must provide an unlimited full guaranty.",
+                  "quote_id": 0,
+                  "source_id": 1
+                },
+                {
+                  "application": "The trusts must provide an unlimited full guaranty due to their combined ownership of 20% of the applicant, and the trustee must execute the guaranty on behalf of each trust.",
+                  "quote": "When one or more trusts (revocable or irrevocable) own, in the aggregate, 20% or more of the applicant, each trust must provide an unlimited full guaranty.",
+                  "quote_id": 0,
+                  "source_id": 1
+                },
+                {
+                  "application": "The trustee must execute the guaranty on behalf of the trust, ensuring that the trust's obligations are formally recognized in the loan agreement.",
+                  "quote": "The trustee must execute the guaranty on behalf of the trust and provide the certifications required in Section A, Ch 2, Para. A.2., Conditions that apply when the EPC is owned in whole or in part by a trust.",
+                  "quote_id": 1,
+                  "source_id": 1
+                },
+                {
+                  "application": "The trustee must execute the guaranty on behalf of the trust, ensuring that the trust's obligations are formally recognized in the loan agreement.",
+                  "quote": "The trustee must execute the guaranty on behalf of the trust and provide the certifications required in Section A, Ch 2, Para. A.2., Conditions that apply when the EPC is owned in whole or in part by a trust.",
+                  "quote_id": 1,
+                  "source_id": 1
+                },
+                {
+                  "application": "The Trustor must also personally guarantee the loan, which adds an additional layer of security for the lender.",
+                  "quote": "In addition, when a trust guaranty is required, the Trustor must also personally guarantee the loan.",
                   "quote_id": 2,
                   "source_id": 1
                 },
                 {
-                  "application": "The trustee's signature is necessary to execute the guaranty for the trust.",
-                  "quote": "The trustee must execute the guaranty on behalf of the trust and provide the certifications required in Section A, Ch 2, Para.",
-                  "quote_id": 0,
+                  "application": "The Trustor must also personally guarantee the loan, which adds an additional layer of security for the lender.",
+                  "quote": "In addition, when a trust guaranty is required, the Trustor must also personally guarantee the loan.",
+                  "quote_id": 2,
                   "source_id": 1
                 }
               ],
-              "text": "Both trusts must provide an unlimited full guaranty, and the trustee must sign on behalf of each trust."
+              "text": "The trusts must provide an unlimited full guaranty due to their combined ownership of 20% of the applicant, and the trustee must execute the guaranty on behalf of each trust. The trustee must execute the guaranty on behalf of the trust, ensuring that the trust's obligations are formally recognized in the loan agreement. The Trustor must also personally guarantee the loan, which adds an additional layer of security for the lender."
             },
             "final_applied_conclusion": {
               "arithmetic_valid": true,
@@ -9488,7 +9609,7 @@
                 {
                   "applicability_reason": null,
                   "applicability_status": "applicable",
-                  "application": "Since the combined ownership of the trusts is 20%, each trust is required to provide a guaranty.",
+                  "application": "The trusts must provide an unlimited full guaranty due to their combined ownership of 20% of the applicant, and the trustee must execute the guaranty on behalf of each trust.",
                   "condition_reason": null,
                   "condition_result": "passed",
                   "conditions": [],
@@ -9510,7 +9631,7 @@
                 {
                   "applicability_reason": null,
                   "applicability_status": "applicable",
-                  "application": "The trustee's signature is necessary to execute the guaranty for the trust.",
+                  "application": "The trusts must provide an unlimited full guaranty due to their combined ownership of 20% of the applicant, and the trustee must execute the guaranty on behalf of each trust.",
                   "condition_reason": null,
                   "condition_result": "passed",
                   "conditions": [],
@@ -9519,7 +9640,95 @@
                   "program_scope": [
                     "general"
                   ],
-                  "quote": "The trustee must execute the guaranty on behalf of the trust and provide the certifications required in Section A, Ch 2, Para.",
+                  "quote": "When one or more trusts (revocable or irrevocable) own, in the aggregate, 20% or more of the applicant, each trust must provide an unlimited full guaranty.",
+                  "quote_located": true,
+                  "rejection_reason": null,
+                  "section_ref": "SBA 7(a) and 504 Business Loan Requirements > Section A. Core Requirements for all 7(a) and 504 Loans > Chapter 5: Other Core Requirements > Guaranties",
+                  "source_chunk": "13 CFR \u00a7 120.160(a)\nEach loan must be guaranteed by at least one individual or entity. If no one individual or entity is a direct and/or indirect owner of 20% or more of the Applicant, at least one of the owners must provide a full unconditional guaranty. In addition, if the guaranty will be provided by a trust, the requirements of Paragraph 3, Corporate/Other Guaranties below must be met.\nPersonal Guaranties:\nAny individual who has direct and/or indirect ownership of 20% or more of an Applicant must provide an unlimited full guaranty. (SBA Form 148 or, for 7(a) loans, equivalent Lender\u2019s form). If a person has executed the Note as a Borrower in an individual capacity, that person does not also have to execute a personal guaranty.\nWhen ownership interest of an Applicant is held by a corporation, partnership or other form of legal entity, the ownership interests of all individuals must be disclosed.\nWhen deemed necessary for credit or other reasons, SBA or, for a loan processed on a delegated basis, the SBA Lender, may require other appropriate individuals or entities to provide full or limited guaranties of the loan without regard to the percentage of their ownership interests, if any. For example, an individual with a minority ownership or no ownership interest in the Applicant or OC who is critical to the operation of the business may be required to provide a personal guaranty (e.g., Supplemental Guarantors).\nIf a limited guaranty is used, the SBA Lender must choose one of the payment limitation options in SBA Form 148L (Unconditional Limited Guaranty) or, for 7(a) loans, equivalent Lender\u2019s form and specify the option in the SBA Terms and Conditions.\nThe SBA Lender must obtain a personal financial statement from all individuals guaranteeing the loan except for Supplemental Guarantors, dated within 90 days of loan approval.\nGuarantors must comply with the requirements in Ch. 1, Para. F, Citizenship and Residency Requirements.\nGuaranty of Spouse:\nEach spouse owning less than 20% of an Applicant must personally guarantee the loan in full when the combined ownership interest of both spouses and minor children is 20% or more.\nFor a non-owner spouse, the SBA Lender must require the signature of the spouse on the appropriate collateral documents. Non-owner spouses are not required to sign the personal financial statement. The spouse\u2019s guaranty secured by jointly held collateral will be limited to the spouse\u2019s interest in the collateral.\nGuarantors must comply with the requirements in Ch. 1, Para. F, Citizenship and Residency Requirements.\nCorporate/Other Guaranties:\nAll entities that have direct and/or indirect ownership of 20% or more of an Applicant must provide an unlimited full guaranty.\nWhen one or more trusts (revocable or irrevocable) own, in the aggregate, 20% or more of the applicant, each trust must provide an unlimited full guaranty. The trustee must execute the guaranty on behalf of the trust and provide the certifications required in Section A, Ch 2, Para. A.2., Conditions that apply when the EPC is owned in whole or in part by a trust. In addition, when a trust guaranty is required, the Trustor must also personally guarantee the loan. All donors to the trust will be deemed to have Trustor status for eligibility purposes.\nThe SBA Lender must obtain appropriate financial statements from all entities guaranteeing the loan in order to determine the assets available to support the guaranty.\nWhen deemed necessary for credit or other reasons, SBA or, for a loan processed on a delegated basis, the SBA Lender, may require other appropriate entities to provide full or limited guaranties of the loan without regard to the percentage of their ownership interests, if any. This may include entities who manage the day-to-day operations of the Applicant or OC through a Management Agreement without an ownership interest in the Applicant or OC.\nReducing Ownership Interest (Six-month lookback rule):\nAny Person (as defined in 13 CFR 120.10) subject to the guaranty requirements 6 months prior to the date of the loan application would continue to be subject to the requirements even if that Person has changed their ownership interest to less than 20%. Except for Ineligible Persons covered under Ch. 1, Para. F, Citizenship and Residency Requirements.\nExceptions to the 6-month lookback rule:\nWhen that Person completely divests their interest prior to the date of application. Complete divestiture includes divestiture of all ownership interest and severance of any relationship with the Applicant (and any associated Eligible Passive Company) in any capacity, including being an employee (paid or unpaid), for the life of the 7(a) or 504 loan.\nFor 7(a) loans for partial changes of ownership, the percentages of ownership for determining who must provide a guaranty will be based on the post-sale percentage of direct and/or indirect ownership in the business. See the appropriate sections in this SOP on partial changes of ownership for more information.",
+                  "source_id": 1,
+                  "source_version": "SOP 50 10 8.1",
+                  "supports_conclusion": true,
+                  "verified": true
+                },
+                {
+                  "applicability_reason": null,
+                  "applicability_status": "applicable",
+                  "application": "The trustee must execute the guaranty on behalf of the trust, ensuring that the trust's obligations are formally recognized in the loan agreement.",
+                  "condition_reason": null,
+                  "condition_result": "passed",
+                  "conditions": [],
+                  "effective_date": "2026-10-01",
+                  "page_number": 93,
+                  "program_scope": [
+                    "general"
+                  ],
+                  "quote": "The trustee must execute the guaranty on behalf of the trust and provide the certifications required in Section A, Ch 2, Para. A.2., Conditions that apply when the EPC is owned in whole or in part by a trust.",
+                  "quote_located": true,
+                  "rejection_reason": null,
+                  "section_ref": "SBA 7(a) and 504 Business Loan Requirements > Section A. Core Requirements for all 7(a) and 504 Loans > Chapter 5: Other Core Requirements > Guaranties",
+                  "source_chunk": "13 CFR \u00a7 120.160(a)\nEach loan must be guaranteed by at least one individual or entity. If no one individual or entity is a direct and/or indirect owner of 20% or more of the Applicant, at least one of the owners must provide a full unconditional guaranty. In addition, if the guaranty will be provided by a trust, the requirements of Paragraph 3, Corporate/Other Guaranties below must be met.\nPersonal Guaranties:\nAny individual who has direct and/or indirect ownership of 20% or more of an Applicant must provide an unlimited full guaranty. (SBA Form 148 or, for 7(a) loans, equivalent Lender\u2019s form). If a person has executed the Note as a Borrower in an individual capacity, that person does not also have to execute a personal guaranty.\nWhen ownership interest of an Applicant is held by a corporation, partnership or other form of legal entity, the ownership interests of all individuals must be disclosed.\nWhen deemed necessary for credit or other reasons, SBA or, for a loan processed on a delegated basis, the SBA Lender, may require other appropriate individuals or entities to provide full or limited guaranties of the loan without regard to the percentage of their ownership interests, if any. For example, an individual with a minority ownership or no ownership interest in the Applicant or OC who is critical to the operation of the business may be required to provide a personal guaranty (e.g., Supplemental Guarantors).\nIf a limited guaranty is used, the SBA Lender must choose one of the payment limitation options in SBA Form 148L (Unconditional Limited Guaranty) or, for 7(a) loans, equivalent Lender\u2019s form and specify the option in the SBA Terms and Conditions.\nThe SBA Lender must obtain a personal financial statement from all individuals guaranteeing the loan except for Supplemental Guarantors, dated within 90 days of loan approval.\nGuarantors must comply with the requirements in Ch. 1, Para. F, Citizenship and Residency Requirements.\nGuaranty of Spouse:\nEach spouse owning less than 20% of an Applicant must personally guarantee the loan in full when the combined ownership interest of both spouses and minor children is 20% or more.\nFor a non-owner spouse, the SBA Lender must require the signature of the spouse on the appropriate collateral documents. Non-owner spouses are not required to sign the personal financial statement. The spouse\u2019s guaranty secured by jointly held collateral will be limited to the spouse\u2019s interest in the collateral.\nGuarantors must comply with the requirements in Ch. 1, Para. F, Citizenship and Residency Requirements.\nCorporate/Other Guaranties:\nAll entities that have direct and/or indirect ownership of 20% or more of an Applicant must provide an unlimited full guaranty.\nWhen one or more trusts (revocable or irrevocable) own, in the aggregate, 20% or more of the applicant, each trust must provide an unlimited full guaranty. The trustee must execute the guaranty on behalf of the trust and provide the certifications required in Section A, Ch 2, Para. A.2., Conditions that apply when the EPC is owned in whole or in part by a trust. In addition, when a trust guaranty is required, the Trustor must also personally guarantee the loan. All donors to the trust will be deemed to have Trustor status for eligibility purposes.\nThe SBA Lender must obtain appropriate financial statements from all entities guaranteeing the loan in order to determine the assets available to support the guaranty.\nWhen deemed necessary for credit or other reasons, SBA or, for a loan processed on a delegated basis, the SBA Lender, may require other appropriate entities to provide full or limited guaranties of the loan without regard to the percentage of their ownership interests, if any. This may include entities who manage the day-to-day operations of the Applicant or OC through a Management Agreement without an ownership interest in the Applicant or OC.\nReducing Ownership Interest (Six-month lookback rule):\nAny Person (as defined in 13 CFR 120.10) subject to the guaranty requirements 6 months prior to the date of the loan application would continue to be subject to the requirements even if that Person has changed their ownership interest to less than 20%. Except for Ineligible Persons covered under Ch. 1, Para. F, Citizenship and Residency Requirements.\nExceptions to the 6-month lookback rule:\nWhen that Person completely divests their interest prior to the date of application. Complete divestiture includes divestiture of all ownership interest and severance of any relationship with the Applicant (and any associated Eligible Passive Company) in any capacity, including being an employee (paid or unpaid), for the life of the 7(a) or 504 loan.\nFor 7(a) loans for partial changes of ownership, the percentages of ownership for determining who must provide a guaranty will be based on the post-sale percentage of direct and/or indirect ownership in the business. See the appropriate sections in this SOP on partial changes of ownership for more information.",
+                  "source_id": 1,
+                  "source_version": "SOP 50 10 8.1",
+                  "supports_conclusion": true,
+                  "verified": true
+                },
+                {
+                  "applicability_reason": null,
+                  "applicability_status": "applicable",
+                  "application": "The trustee must execute the guaranty on behalf of the trust, ensuring that the trust's obligations are formally recognized in the loan agreement.",
+                  "condition_reason": null,
+                  "condition_result": "passed",
+                  "conditions": [],
+                  "effective_date": "2026-10-01",
+                  "page_number": 93,
+                  "program_scope": [
+                    "general"
+                  ],
+                  "quote": "The trustee must execute the guaranty on behalf of the trust and provide the certifications required in Section A, Ch 2, Para. A.2., Conditions that apply when the EPC is owned in whole or in part by a trust.",
+                  "quote_located": true,
+                  "rejection_reason": null,
+                  "section_ref": "SBA 7(a) and 504 Business Loan Requirements > Section A. Core Requirements for all 7(a) and 504 Loans > Chapter 5: Other Core Requirements > Guaranties",
+                  "source_chunk": "13 CFR \u00a7 120.160(a)\nEach loan must be guaranteed by at least one individual or entity. If no one individual or entity is a direct and/or indirect owner of 20% or more of the Applicant, at least one of the owners must provide a full unconditional guaranty. In addition, if the guaranty will be provided by a trust, the requirements of Paragraph 3, Corporate/Other Guaranties below must be met.\nPersonal Guaranties:\nAny individual who has direct and/or indirect ownership of 20% or more of an Applicant must provide an unlimited full guaranty. (SBA Form 148 or, for 7(a) loans, equivalent Lender\u2019s form). If a person has executed the Note as a Borrower in an individual capacity, that person does not also have to execute a personal guaranty.\nWhen ownership interest of an Applicant is held by a corporation, partnership or other form of legal entity, the ownership interests of all individuals must be disclosed.\nWhen deemed necessary for credit or other reasons, SBA or, for a loan processed on a delegated basis, the SBA Lender, may require other appropriate individuals or entities to provide full or limited guaranties of the loan without regard to the percentage of their ownership interests, if any. For example, an individual with a minority ownership or no ownership interest in the Applicant or OC who is critical to the operation of the business may be required to provide a personal guaranty (e.g., Supplemental Guarantors).\nIf a limited guaranty is used, the SBA Lender must choose one of the payment limitation options in SBA Form 148L (Unconditional Limited Guaranty) or, for 7(a) loans, equivalent Lender\u2019s form and specify the option in the SBA Terms and Conditions.\nThe SBA Lender must obtain a personal financial statement from all individuals guaranteeing the loan except for Supplemental Guarantors, dated within 90 days of loan approval.\nGuarantors must comply with the requirements in Ch. 1, Para. F, Citizenship and Residency Requirements.\nGuaranty of Spouse:\nEach spouse owning less than 20% of an Applicant must personally guarantee the loan in full when the combined ownership interest of both spouses and minor children is 20% or more.\nFor a non-owner spouse, the SBA Lender must require the signature of the spouse on the appropriate collateral documents. Non-owner spouses are not required to sign the personal financial statement. The spouse\u2019s guaranty secured by jointly held collateral will be limited to the spouse\u2019s interest in the collateral.\nGuarantors must comply with the requirements in Ch. 1, Para. F, Citizenship and Residency Requirements.\nCorporate/Other Guaranties:\nAll entities that have direct and/or indirect ownership of 20% or more of an Applicant must provide an unlimited full guaranty.\nWhen one or more trusts (revocable or irrevocable) own, in the aggregate, 20% or more of the applicant, each trust must provide an unlimited full guaranty. The trustee must execute the guaranty on behalf of the trust and provide the certifications required in Section A, Ch 2, Para. A.2., Conditions that apply when the EPC is owned in whole or in part by a trust. In addition, when a trust guaranty is required, the Trustor must also personally guarantee the loan. All donors to the trust will be deemed to have Trustor status for eligibility purposes.\nThe SBA Lender must obtain appropriate financial statements from all entities guaranteeing the loan in order to determine the assets available to support the guaranty.\nWhen deemed necessary for credit or other reasons, SBA or, for a loan processed on a delegated basis, the SBA Lender, may require other appropriate entities to provide full or limited guaranties of the loan without regard to the percentage of their ownership interests, if any. This may include entities who manage the day-to-day operations of the Applicant or OC through a Management Agreement without an ownership interest in the Applicant or OC.\nReducing Ownership Interest (Six-month lookback rule):\nAny Person (as defined in 13 CFR 120.10) subject to the guaranty requirements 6 months prior to the date of the loan application would continue to be subject to the requirements even if that Person has changed their ownership interest to less than 20%. Except for Ineligible Persons covered under Ch. 1, Para. F, Citizenship and Residency Requirements.\nExceptions to the 6-month lookback rule:\nWhen that Person completely divests their interest prior to the date of application. Complete divestiture includes divestiture of all ownership interest and severance of any relationship with the Applicant (and any associated Eligible Passive Company) in any capacity, including being an employee (paid or unpaid), for the life of the 7(a) or 504 loan.\nFor 7(a) loans for partial changes of ownership, the percentages of ownership for determining who must provide a guaranty will be based on the post-sale percentage of direct and/or indirect ownership in the business. See the appropriate sections in this SOP on partial changes of ownership for more information.",
+                  "source_id": 1,
+                  "source_version": "SOP 50 10 8.1",
+                  "supports_conclusion": true,
+                  "verified": true
+                },
+                {
+                  "applicability_reason": null,
+                  "applicability_status": "applicable",
+                  "application": "The Trustor must also personally guarantee the loan, which adds an additional layer of security for the lender.",
+                  "condition_reason": null,
+                  "condition_result": "passed",
+                  "conditions": [],
+                  "effective_date": "2026-10-01",
+                  "page_number": 93,
+                  "program_scope": [
+                    "general"
+                  ],
+                  "quote": "In addition, when a trust guaranty is required, the Trustor must also personally guarantee the loan.",
+                  "quote_located": true,
+                  "rejection_reason": null,
+                  "section_ref": "SBA 7(a) and 504 Business Loan Requirements > Section A. Core Requirements for all 7(a) and 504 Loans > Chapter 5: Other Core Requirements > Guaranties",
+                  "source_chunk": "13 CFR \u00a7 120.160(a)\nEach loan must be guaranteed by at least one individual or entity. If no one individual or entity is a direct and/or indirect owner of 20% or more of the Applicant, at least one of the owners must provide a full unconditional guaranty. In addition, if the guaranty will be provided by a trust, the requirements of Paragraph 3, Corporate/Other Guaranties below must be met.\nPersonal Guaranties:\nAny individual who has direct and/or indirect ownership of 20% or more of an Applicant must provide an unlimited full guaranty. (SBA Form 148 or, for 7(a) loans, equivalent Lender\u2019s form). If a person has executed the Note as a Borrower in an individual capacity, that person does not also have to execute a personal guaranty.\nWhen ownership interest of an Applicant is held by a corporation, partnership or other form of legal entity, the ownership interests of all individuals must be disclosed.\nWhen deemed necessary for credit or other reasons, SBA or, for a loan processed on a delegated basis, the SBA Lender, may require other appropriate individuals or entities to provide full or limited guaranties of the loan without regard to the percentage of their ownership interests, if any. For example, an individual with a minority ownership or no ownership interest in the Applicant or OC who is critical to the operation of the business may be required to provide a personal guaranty (e.g., Supplemental Guarantors).\nIf a limited guaranty is used, the SBA Lender must choose one of the payment limitation options in SBA Form 148L (Unconditional Limited Guaranty) or, for 7(a) loans, equivalent Lender\u2019s form and specify the option in the SBA Terms and Conditions.\nThe SBA Lender must obtain a personal financial statement from all individuals guaranteeing the loan except for Supplemental Guarantors, dated within 90 days of loan approval.\nGuarantors must comply with the requirements in Ch. 1, Para. F, Citizenship and Residency Requirements.\nGuaranty of Spouse:\nEach spouse owning less than 20% of an Applicant must personally guarantee the loan in full when the combined ownership interest of both spouses and minor children is 20% or more.\nFor a non-owner spouse, the SBA Lender must require the signature of the spouse on the appropriate collateral documents. Non-owner spouses are not required to sign the personal financial statement. The spouse\u2019s guaranty secured by jointly held collateral will be limited to the spouse\u2019s interest in the collateral.\nGuarantors must comply with the requirements in Ch. 1, Para. F, Citizenship and Residency Requirements.\nCorporate/Other Guaranties:\nAll entities that have direct and/or indirect ownership of 20% or more of an Applicant must provide an unlimited full guaranty.\nWhen one or more trusts (revocable or irrevocable) own, in the aggregate, 20% or more of the applicant, each trust must provide an unlimited full guaranty. The trustee must execute the guaranty on behalf of the trust and provide the certifications required in Section A, Ch 2, Para. A.2., Conditions that apply when the EPC is owned in whole or in part by a trust. In addition, when a trust guaranty is required, the Trustor must also personally guarantee the loan. All donors to the trust will be deemed to have Trustor status for eligibility purposes.\nThe SBA Lender must obtain appropriate financial statements from all entities guaranteeing the loan in order to determine the assets available to support the guaranty.\nWhen deemed necessary for credit or other reasons, SBA or, for a loan processed on a delegated basis, the SBA Lender, may require other appropriate entities to provide full or limited guaranties of the loan without regard to the percentage of their ownership interests, if any. This may include entities who manage the day-to-day operations of the Applicant or OC through a Management Agreement without an ownership interest in the Applicant or OC.\nReducing Ownership Interest (Six-month lookback rule):\nAny Person (as defined in 13 CFR 120.10) subject to the guaranty requirements 6 months prior to the date of the loan application would continue to be subject to the requirements even if that Person has changed their ownership interest to less than 20%. Except for Ineligible Persons covered under Ch. 1, Para. F, Citizenship and Residency Requirements.\nExceptions to the 6-month lookback rule:\nWhen that Person completely divests their interest prior to the date of application. Complete divestiture includes divestiture of all ownership interest and severance of any relationship with the Applicant (and any associated Eligible Passive Company) in any capacity, including being an employee (paid or unpaid), for the life of the 7(a) or 504 loan.\nFor 7(a) loans for partial changes of ownership, the percentages of ownership for determining who must provide a guaranty will be based on the post-sale percentage of direct and/or indirect ownership in the business. See the appropriate sections in this SOP on partial changes of ownership for more information.",
+                  "source_id": 1,
+                  "source_version": "SOP 50 10 8.1",
+                  "supports_conclusion": true,
+                  "verified": true
+                },
+                {
+                  "applicability_reason": null,
+                  "applicability_status": "applicable",
+                  "application": "The Trustor must also personally guarantee the loan, which adds an additional layer of security for the lender.",
+                  "condition_reason": null,
+                  "condition_result": "passed",
+                  "conditions": [],
+                  "effective_date": "2026-10-01",
+                  "page_number": 93,
+                  "program_scope": [
+                    "general"
+                  ],
+                  "quote": "In addition, when a trust guaranty is required, the Trustor must also personally guarantee the loan.",
                   "quote_located": true,
                   "rejection_reason": null,
                   "section_ref": "SBA 7(a) and 504 Business Loan Requirements > Section A. Core Requirements for all 7(a) and 504 Loans > Chapter 5: Other Core Requirements > Guaranties",
@@ -9530,7 +9739,7 @@
                   "verified": true
                 }
               ],
-              "text": "Both trusts must provide an unlimited full guaranty, and the trustee must sign on behalf of each trust.\n\nSupplied facts (quoted from your question): \u201cA 7(a) applicant is owned by two revocable trusts, one at 12% and one at 8%.\u201d. These stated facts are not a substitute for operative legal authority."
+              "text": "The trusts must provide an unlimited full guaranty due to their combined ownership of 20% of the applicant, and the trustee must execute the guaranty on behalf of each trust. The trustee must execute the guaranty on behalf of the trust, ensuring that the trust's obligations are formally recognized in the loan agreement. The Trustor must also personally guarantee the loan, which adds an additional layer of security for the lender.\n\nSupplied facts (quoted from your question): \u201cA 7(a) applicant is owned by two revocable trusts, one at 12% and one at 8%.\u201d. These stated facts are not a substitute for operative legal authority."
             },
             "final_support_status": "supported",
             "guarantor_rows": [],
@@ -9543,18 +9752,80 @@
                     "source_id": 1
                   }
                 ],
-                "text": "When one or more trusts own, in the aggregate, 20% or more of the applicant, each trust must provide an unlimited full guaranty."
+                "text": "When one or more trusts (revocable or irrevocable) own, in the aggregate, 20% or more of the applicant, each trust must provide an unlimited full guaranty."
               },
               {
                 "citations": [
                   {
-                    "quote": "The trustee must execute the guaranty on behalf of the trust and provide the certifications required in Section A, Ch 2, Para.",
+                    "quote": "The trustee must execute the guaranty on behalf of the trust and provide the certifications required in Section A, Ch 2, Para. A.2., Conditions that apply when the EPC is owned in whole or in part by a trust.",
                     "source_id": 1
                   }
                 ],
-                "text": "The trustee must execute the guaranty on behalf of the trust."
+                "text": "The trustee must execute the guaranty on behalf of the trust and provide the certifications required in Section A, Ch 2, Para. A.2., Conditions that apply when the EPC is owned in whole or in part by a trust."
+              },
+              {
+                "citations": [
+                  {
+                    "quote": "In addition, when a trust guaranty is required, the Trustor must also personally guarantee the loan.",
+                    "source_id": 1
+                  }
+                ],
+                "text": "In addition, when a trust guaranty is required, the Trustor must also personally guarantee the loan."
               }
             ],
+            "source_role_applications": {
+              "role_0": {
+                "citations": [
+                  {
+                    "application": "The trusts must provide an unlimited full guaranty due to their combined ownership of 20% of the applicant, and the trustee must execute the guaranty on behalf of each trust.",
+                    "quote": "When one or more trusts (revocable or irrevocable) own, in the aggregate, 20% or more of the applicant, each trust must provide an unlimited full guaranty.",
+                    "quote_id": 0,
+                    "source_id": 1
+                  },
+                  {
+                    "application": "The trusts must provide an unlimited full guaranty due to their combined ownership of 20% of the applicant, and the trustee must execute the guaranty on behalf of each trust.",
+                    "quote": "When one or more trusts (revocable or irrevocable) own, in the aggregate, 20% or more of the applicant, each trust must provide an unlimited full guaranty.",
+                    "quote_id": 0,
+                    "source_id": 1
+                  }
+                ],
+                "text": "The trusts must provide an unlimited full guaranty due to their combined ownership of 20% of the applicant, and the trustee must execute the guaranty on behalf of each trust."
+              },
+              "role_1": {
+                "citations": [
+                  {
+                    "application": "The trustee must execute the guaranty on behalf of the trust, ensuring that the trust's obligations are formally recognized in the loan agreement.",
+                    "quote": "The trustee must execute the guaranty on behalf of the trust and provide the certifications required in Section A, Ch 2, Para. A.2., Conditions that apply when the EPC is owned in whole or in part by a trust.",
+                    "quote_id": 1,
+                    "source_id": 1
+                  },
+                  {
+                    "application": "The trustee must execute the guaranty on behalf of the trust, ensuring that the trust's obligations are formally recognized in the loan agreement.",
+                    "quote": "The trustee must execute the guaranty on behalf of the trust and provide the certifications required in Section A, Ch 2, Para. A.2., Conditions that apply when the EPC is owned in whole or in part by a trust.",
+                    "quote_id": 1,
+                    "source_id": 1
+                  }
+                ],
+                "text": "The trustee must execute the guaranty on behalf of the trust, ensuring that the trust's obligations are formally recognized in the loan agreement."
+              },
+              "role_2": {
+                "citations": [
+                  {
+                    "application": "The Trustor must also personally guarantee the loan, which adds an additional layer of security for the lender.",
+                    "quote": "In addition, when a trust guaranty is required, the Trustor must also personally guarantee the loan.",
+                    "quote_id": 2,
+                    "source_id": 1
+                  },
+                  {
+                    "application": "The Trustor must also personally guarantee the loan, which adds an additional layer of security for the lender.",
+                    "quote": "In addition, when a trust guaranty is required, the Trustor must also personally guarantee the loan.",
+                    "quote_id": 2,
+                    "source_id": 1
+                  }
+                ],
+                "text": "The Trustor must also personally guarantee the loan, which adds an additional layer of security for the lender."
+              }
+            },
             "stated_facts": [
               "A 7(a) applicant is owned by two revocable trusts, one at 12% and one at 8%."
             ]
@@ -9565,7 +9836,16 @@
         "unresolved_reason": null
       }
     ],
-    "summary": "Do the trusts' ownership percentages aggregate for guaranty purposes? The ownership percentages of the two trusts aggregate to meet the 20% threshold for guaranty requirements, necessitating that each trust provide an unlimited full guaranty.\n\nSupplied facts (quoted from your question): \u201cA 7(a) applicant is owned by two revocable trusts, one at 12% and one at 8%.\u201d. These stated facts are not a substitute for operative legal authority. Who must sign for the 7(a) applicant owned by the trusts? Both trusts must provide an unlimited full guaranty, and the trustee must sign on behalf of each trust.\n\nSupplied facts (quoted from your question): \u201cA 7(a) applicant is owned by two revocable trusts, one at 12% and one at 8%.\u201d. These stated facts are not a substitute for operative legal authority.",
+    "summary": "Do the trusts' ownership percentages aggregate for guaranty purposes? Not addressed by retrieved provisions. Who must sign for the 7(a) applicant owned by the trusts? The trusts must provide an unlimited full guaranty due to their combined ownership of 20% of the applicant, and the trustee must execute the guaranty on behalf of each trust. The trustee must execute the guaranty on behalf of the trust, ensuring that the trust's obligations are formally recognized in the loan agreement. The Trustor must also personally guarantee the loan, which adds an additional layer of security for the lender.\n\nSupplied facts (quoted from your question): \u201cA 7(a) applicant is owned by two revocable trusts, one at 12% and one at 8%.\u201d. These stated facts are not a substitute for operative legal authority.",
     "version_warning": null
+  },
+  "response_sha256": "478661418ee0d6c9d4dd30b6f7a82112b30c38ab0ad7533515684398902e1b4d",
+  "response_hash_encoding": "UTF-8 JSON with sort_keys=True, separators=(comma,colon), ensure_ascii=True",
+  "manual_review": {
+    "status": "FAILED_QUOTE_ALIGNMENT",
+    "aggregation": "12 plus 8 equals exactly 20; each trust full guaranty is source-supported.",
+    "role_coverage": "Original response now includes trustee execution and Trustor personal guaranty.",
+    "failure": "Ownership quote application also asserts trustee execution; this duty is in another quote, not its own.",
+    "production_verification": "NOT_RUN"
   }
 }

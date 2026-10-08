@@ -5,17 +5,25 @@ The final responses are saved in `sophia-issue-eval-results.json` and
 `sophia-trust-development-answer.json`. They were captured against source SHA
 `0fb0c4692cf529380827746e5fe812e42ea82b6f6fdf97a71d1093677d963183`
 and source-content build SHA
-`7f6d64de265556d519bd29d2238d504b4b92ab9f6f8a3fd5a8ee10ba76061891`.
-The six captured answers and their hashes were preserved when rescored
-against an added guard for the reproduced unsupported permission claim.
+`c3bbfe00f886711c40d97ddbbfe3b154e7f61f5b26b9206d937d7ca179a511c7`.
+Eight fact-changing responses and the separate original trust response were
+captured from the running API. The unchanged raw eight-case capture is saved
+as `sophia-issue-eval-live-capture.json`. Its response hashes and questions were
+preserved when rescored with the current evaluator, including recognition of
+a source-cited guarantor table as a visible answer.
+
+**Result: PARTIAL, NOT DEMO-READY.** Automated checks: **108/112**.
+Four named-Trustor coverage checks fail. Hand review additionally finds an
+own-quote alignment defect in the original trust answer. Thirteen of the
+fifteen subanswers in the eight-case suite remain unresolved/not established.
+Neither structural passes nor safely withheld answers establish legal accuracy.
 
 ## Fact-changing covenant questions
 
-Six distinct live questions produced eleven issue-specific subanswers. Ten
-remain `not_established`. The eleventh claims that a signed agreement makes
-the proposed increase valid, **but fails legal hand-review**. The report now
-honestly fails the added consent-sufficiency counterexample check: 87 of 88
-checks pass. This is not a legal-answer or demo pass.
+The six covenant questions produced eleven issue-specific subanswers. All
+eleven now remain `not_established`; these are not complete legal resolutions.
+The reproduced signed-consent overclaim is withheld by a source-logic gate
+independent of the semantic auditor's yes/no approval.
 
 - Unspecified rate/consent, 504 Preference, and $125,000 balance with specific
   SBA written consent: each has a saved real response. The contrast answer
@@ -25,24 +33,17 @@ checks pass. This is not a legal-answer or demo pass.
   change, variable-rate with expressly no written agreement, and fixed-rate
   with a specific signed agreement: the responses retain each materially
   different rate/agreement fact rather than saying the facts did not establish
-  them. The signed variable-rate answer is nevertheless an overclaim: it
-  calls the agreement “valid under the note-rate rules” because it supplies
-  “necessary consent.” Its quote says the spread “may not be changed ...
-  without the written agreement of the Borrower.” That is a necessary
-  condition, not proof of overall permissibility. Another selected quote
-  requires consent **and** notification to the LGPC or a change through
-  E-Tran Servicing; that additional action is not established by the facts.
-  The independent citation audit admitted the conclusion anyway. This is a
-  reproduced answer-pipeline defect, not just a stale-report problem.
+  them. The signed variable-rate response now explains: “The selected quotes
+  state prerequisites or restrictions, not affirmative authority for the
+  claimed permission. Meeting a necessary condition does not establish
+  overall permissibility.” It visibly retains the signed agreement fact.
+  It no longer calls that agreement sufficient authorization for the increase.
 
-An earlier live pass incorrectly called an account covenant a prohibited
-Preference from the prohibition alone and treated consent as sufficient
-permission for a rate increase. These were actual answer failures, even where
-structural checks were green. The hard-coded covenant conclusion and automatic
-post-audit conclusion substitution have been removed. However, a live model
-can still make the consent-sufficiency error through the remaining semantic
-audit. The new eval catches the observed wording; it does not fix the
-answer generator or prove every other formulation safe.
+Earlier real failures remain useful counterexamples, not successful tests.
+Verbatim excerpts of observed failures are retained in
+`tests/fixtures/sophia_observed_failures.json`. No code-generated legal
+conclusion is substituted for a rejected model answer. Broader permission
+proof and useful resolution of these covenant issues remain unproven.
 
 ## Trust aggregation, development only
 
@@ -53,15 +54,27 @@ irrevocable) own, in the aggregate, 20% or more of the applicant, each trust
 must provide an unlimited full guaranty.” The aggregation conclusion and
 two trust guaranties are supported for the stated facts.
 
-**The separate “who must sign” answer is incomplete.** The final live answer
-correctly cites the trustee's execution rule, but omits the retrieved rule:
+The separate original “who must sign” answer now includes the trustee's
+execution duty and the Trustor's personal guaranty, citing the operative rule:
 “In addition, when a trust guaranty is required, the Trustor must also
-personally guarantee the loan.” It labels the signer issue `supported` and
-has no Trustor row or explicit unresolved capacity. An earlier live run
-instead attached a Note-signing exception to its proposed Trustor
-explanation, which the audit rejected; dropping the capacity altogether is
-not a completeness fix. Do not present source text I located manually as a
-completed, cited user answer. This signer-capacity gap remains a blocker.
+personally guarantee the loan.” Source-role output slots, quote bindings and
+admission checks prevent a silently omitted role from counting as complete.
+Rejected applications retain explicit unresolved source-role rows.
+
+**Hand-review failure: own-quote alignment.** The application attached to the
+ownership/aggregation quote also says “the trustee must execute the guaranty
+on behalf of each trust.” That duty is stated in the separate trustee quote,
+not the selected ownership quote. The yes/no auditor admitted the compound
+application. Having the right paragraph elsewhere and covering all roles
+does not fix this explanation-to-quote defect. Additional purpose statements
+such as “adds an additional layer of security” also need source scrutiny.
+
+The named-capacity counterexample supplies Person A/B for Trust A and Person
+C/D for Trust B. Both signer subanswers remain explicitly unresolved, so
+four checks requiring visible Trustor/personal-guaranty/Person B/Person D
+conclusions fail. The facts are preserved; this is not missing user input.
+The 12% + 6% counterexample correctly concludes **18% does not meet 20%**,
+without claiming a blanket waiver of all guaranty obligations.
 
 The final fact echo quotes only the declarative ownership premise, not the
 user's question about whether ownership aggregates. That fact-label defect
@@ -69,19 +82,20 @@ was fixed and checked against this live response.
 
 ## Published-build verification
 
-The public production `/api/healthz` returned the correct corpus SHA and
-395 chunks, but did **not** return this new build SHA. An unsigned query
-returned 401. Those public checks do not prove authorized production answers
-or a real non-allowlisted account's 403. The separate
+The historical public observations in the production status file showed
+the correct corpus SHA, 395 chunks and an unsigned query's 401. They are not
+a new verification of the currently published build. Those observations
+do not prove authorized production answers or a genuine-account 403. The
 `sophia-production-verification-status.json` correctly marks authenticated
 regression, production trust review, and the genuine-account 403 **NOT_RUN**.
 
 `sophia-production-verification.html` is a pinned, credential-free browser
-capture guide, **not a completed verification**. Publish the build above
-before using it; its start/end build and corpus gates prevent recording
-answers from a different build. A real authorized session and a separate
-real non-allowlisted account are still needed. Never upload session data,
-identities, or callback URLs with the captures.
+capture guide, **not a completed verification**. It currently pins the
+development build above, which is not yet demo-ready. After the remaining
+legal defects are fixed, regenerate it for the approved build before
+publication and genuine-account testing. Its start/end build and corpus
+gates reject a different build. Never upload session data, identities, or
+callback URLs with captures. No publication was performed in this work.
 
 GitHub sync settings and credentials were not changed. No GitHub push was
 attempted as a test.

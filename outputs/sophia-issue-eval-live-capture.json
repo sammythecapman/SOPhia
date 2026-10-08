@@ -1,10 +1,10 @@
 {
   "format": "sophia-issue-evals-v2",
-  "recorded_at_utc": "2026-10-08T20:39:49.370198+00:00",
-  "mode": "rescore",
+  "recorded_at_utc": "2026-10-08T20:26:45.148445+00:00",
+  "mode": "live-development",
   "base_url": "http://localhost:80",
   "fixture_sha256": "d4f279140be8bfd9198932818f4cb8f963a950b0e244b26e122e27af07f0354e",
-  "evaluator_sha256": "615875870ebcd249a44342615d01bbfe9cbb9b4840e3ffd71a93afc69bbff9d4",
+  "evaluator_sha256": "ceecadb7890a2fbc1c2613648ce77ef4a7be60b9a49749a94e329f81116140f5",
   "health_before": {
     "build_sha": "c3bbfe00f886711c40d97ddbbfe3b154e7f61f5b26b9206d937d7ca179a511c7",
     "build_sha_kind": "source-content-sha256",
@@ -19,20 +19,13 @@
   "planned_case_count": 8,
   "completed": true,
   "legal_accuracy_note": "Automated checks are not a hand-reviewed legal accuracy pass.",
-  "source_capture": {
-    "path": "outputs/sophia-issue-eval-live-capture.json",
-    "recorded_at_utc": "2026-10-08T20:26:45.148445+00:00",
-    "mode": "live-development",
-    "base_url": "http://localhost:80",
-    "fixture_sha256": "d4f279140be8bfd9198932818f4cb8f963a950b0e244b26e122e27af07f0354e",
-    "evaluator_sha256": "ceecadb7890a2fbc1c2613648ce77ef4a7be60b9a49749a94e329f81116140f5"
-  },
+  "source_capture": null,
   "cases": [
     {
       "id": "deposit-covenant-rate-step-up",
       "question": "A lender proposes to include a covenant in the loan agreement requiring the Borrower to maintain its deposit accounts with the lender, with the interest rate on the loan increasing by 1.00% if the Borrower fails to do so. Under SBA Loan Program Requirements, is such a provision permissible, or would the rate increase constitute a prohibited Preference (as a compensating balance arrangement) or an impermissible default rate?",
-      "recorded_at_utc": "2026-10-08T20:39:49.376664+00:00",
-      "elapsed_seconds": 0.0,
+      "recorded_at_utc": "2026-10-08T20:27:05.064054+00:00",
+      "elapsed_seconds": 19.91,
       "checks": {
         "labeled issue: Preference": true,
         "answer or explicit gap: Preference": true,
@@ -7423,8 +7416,8 @@
     {
       "id": "504-deposit-account-preference-scope",
       "question": "For an SBA 504 loan, the lender requires the Borrower to maintain deposit accounts with that lender. Under the 504 Loan Program Requirements, does this arrangement constitute a prohibited Preference?",
-      "recorded_at_utc": "2026-10-08T20:39:49.392561+00:00",
-      "elapsed_seconds": 0.0,
+      "recorded_at_utc": "2026-10-08T20:27:18.987369+00:00",
+      "elapsed_seconds": 13.9,
       "checks": {
         "labeled issue: 504 Preference": true,
         "answer or explicit gap: 504 Preference": true,
@@ -15929,8 +15922,8 @@
     {
       "id": "deposit-covenant-balance-and-consent-supplied",
       "question": "A lender proposes a loan agreement requiring the Borrower to maintain its deposit accounts with the lender, with the loan interest rate increasing by 1.00% if the Borrower fails to do so. This covenant requires a minimum daily account balance of $125,000, and the SBA has granted written consent specifically to this requirement. Under SBA Loan Program Requirements, is such a provision permissible, or would it constitute a prohibited Preference or impermissible default rate?",
-      "recorded_at_utc": "2026-10-08T20:39:49.456421+00:00",
-      "elapsed_seconds": 0.0,
+      "recorded_at_utc": "2026-10-08T20:27:37.880222+00:00",
+      "elapsed_seconds": 18.84,
       "checks": {
         "labeled issue: Preference": true,
         "answer or explicit gap: Preference": true,
@@ -23339,8 +23332,8 @@
     {
       "id": "variable-rate-specific-written-agreement",
       "question": "For a Standard 7(a) variable-rate loan, the lender requires the Borrower to maintain deposit accounts with the lender. The loan's Note spread increases by 1.00% if the Borrower fails to maintain those accounts. The Borrower has signed a written agreement specifically consenting to this 1.00% spread change. Does that agreement authorize this covenant-triggered increase under the Note-rate rules, and is the deposit-account requirement a prohibited Preference?",
-      "recorded_at_utc": "2026-10-08T20:39:49.492032+00:00",
-      "elapsed_seconds": 0.0,
+      "recorded_at_utc": "2026-10-08T20:27:59.831434+00:00",
+      "elapsed_seconds": 21.9,
       "checks": {
         "labeled issue: Preference": true,
         "answer or explicit gap: Preference": true,
@@ -31097,8 +31090,8 @@
     {
       "id": "variable-rate-no-written-agreement",
       "question": "For a Standard 7(a) variable-rate loan, the lender requires the Borrower to maintain deposit accounts with the lender. The loan's Note spread increases by 1.00% if the Borrower fails to maintain those accounts. The Borrower has not signed any written agreement to this spread change. Is the covenant-triggered increase authorized under the Note-rate rules, and is the deposit-account requirement a prohibited Preference?",
-      "recorded_at_utc": "2026-10-08T20:39:49.539253+00:00",
-      "elapsed_seconds": 0.0,
+      "recorded_at_utc": "2026-10-08T20:28:22.624162+00:00",
+      "elapsed_seconds": 22.74,
       "checks": {
         "labeled issue: Preference": true,
         "answer or explicit gap: Preference": true,
@@ -38831,8 +38824,8 @@
     {
       "id": "fixed-rate-specific-written-agreement",
       "question": "For a Standard 7(a) fixed-rate loan, the lender requires the Borrower to maintain deposit accounts with the lender. The loan's Note rate increases by 1.00% if the Borrower fails to maintain those accounts. The Borrower has signed a written agreement specifically consenting to this 1.00% Note-rate change. Does that agreement authorize this covenant-triggered increase under the fixed-rate rules, and is the deposit-account requirement a prohibited Preference?",
-      "recorded_at_utc": "2026-10-08T20:39:49.600491+00:00",
-      "elapsed_seconds": 0.0,
+      "recorded_at_utc": "2026-10-08T20:28:43.764287+00:00",
+      "elapsed_seconds": 21.05,
       "checks": {
         "labeled issue: Preference": true,
         "answer or explicit gap: Preference": true,
@@ -46558,11 +46551,11 @@
     {
       "id": "trust-signers-named-capacities",
       "question": "For a Standard 7(a) applicant, two revocable trusts own 12% and 8%. Trust A's trustee is Person A and its Trustor is Person B. Trust B's trustee is Person C and its Trustor is Person D. Do the trusts' ownership percentages aggregate for guaranty purposes, and who must sign in each capacity?",
-      "recorded_at_utc": "2026-10-08T20:39:49.671163+00:00",
-      "elapsed_seconds": 0.0,
+      "recorded_at_utc": "2026-10-08T20:29:27.395429+00:00",
+      "elapsed_seconds": 43.56,
       "checks": {
         "labeled issue: Trust aggregation": true,
-        "answer or explicit gap: Trust aggregation": true,
+        "answer or explicit gap: Trust aggregation": false,
         "bottom line includes: Trust aggregation": true,
         "labeled issue: Trust signer capacities": true,
         "answer or explicit gap: Trust signer capacities": true,
@@ -60749,8 +60742,8 @@
     {
       "id": "trust-below-aggregation-threshold",
       "question": "For a Standard 7(a) applicant, two revocable trusts own 12% and 6%. Does their aggregate ownership meet the 20% threshold in the SOP trust-guaranty provision?",
-      "recorded_at_utc": "2026-10-08T20:39:49.821832+00:00",
-      "elapsed_seconds": 0.0,
+      "recorded_at_utc": "2026-10-08T20:29:44.229188+00:00",
+      "elapsed_seconds": 16.64,
       "checks": {
         "labeled issue: Trust ownership threshold": true,
         "answer or explicit gap: Trust ownership threshold": true,
@@ -65747,20 +65740,5 @@
     "source_url": "https://www.sba.gov/document/sop-50-10-lender-development-company-loan-programs",
     "status": "ok"
   },
-  "build_unchanged": true,
-  "manual_review": {
-    "status": "FAILED_LEGAL_REVIEW",
-    "scope": "development only",
-    "checks_passed": 108,
-    "checks_total": 112,
-    "unresolved_subanswers": 13,
-    "remaining_failures": [
-      "Named Trust A/B signer conclusions do not establish Trustor personal-guaranty coverage or Person B/Person D duties.",
-      "Original trust response borrows trustee execution in the application attached to the ownership quote."
-    ],
-    "consent_counterexample": "Unsafe necessary-condition-to-permission claim withheld; rate issues remain not established, not legally resolved.",
-    "additional_real_capture": "outputs/sophia-trust-development-answer.json",
-    "review_document": "outputs/sophia-answer-review.md",
-    "production_verification": "NOT_RUN"
-  }
+  "build_unchanged": true
 }

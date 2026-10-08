@@ -22,6 +22,10 @@ from applicability import (
 from auth import configure_auth, current_user, require_auth
 from db import connection
 from build_info import read_build_info
+from evidence_logic import (
+    permission_scope_error, signer_obligations, missing_signer_obligations,
+    unresolved_obligation_row, source_role_schema, assemble_source_role_claims,
+)
 from source_metadata import canonicalize_source_url
 from sophia_issues import (
     applied_evidence_error,
@@ -2876,6 +2880,14 @@ def query_sop():
         validated_candidates = validate_candidate_citations(candidates, source_by_id)
         audit_results = audit_propositions(client, question, validated_candidates, source_by_id)
         for candidate_index, candidate in enumerate(validated_candidates):
+            audit = audit_results.get(candidate_index, {})
+            if candidate.get("kind") == "conclusion":
+                if audit.get("rejection_reason"):
+                    subanswers[candidate["subanswer_index"]]["conclusion_rejection"] = audit["rejection_reason"]
+                for target in audit.get("missing_obligations", []):
+                    subanswers[candidate["subanswer_index"]].setdefault(
+                        "unresolved_guarantor_rows", []
+                    ).append(unresolved_obligation_row(target))
             trigger = audit_results.get(candidate_index, {}).get(
                 "unresolved_trigger"
             )
@@ -3034,8 +3046,26 @@ def query_sop():
                 dict(row)
                 for row in item.get("unresolved_guarantor_rows", [])
             ]
+            if not applied_conclusion:
+                existing_gaps = {
+                    (row.get("capacity", "").lower(), row.get("triggering_provision", ""))
+                    for row in unresolved_guarantor_rows
+                }
+                for target in signer_obligations(
+                    item.get("policy_issue") or {}, item.get("requested_question", "")
+                ):
+                    covered_by_row = any(
+                        citation.get("source_id") == target["source_id"]
+                        and target["quote"] in citation.get("quote", "")
+                        for row in row_candidates
+                        for citation in row.get("citations", [])
+                    )
+                    key = (target["subject"].lower(), target["quote"])
+                    if not covered_by_row and key not in existing_gaps:
+                        unresolved_guarantor_rows.append(unresolved_obligation_row(target))
+                        existing_gaps.add(key)
             if applied_conclusion or row_candidates:
-                support_status = "supported"
+                support_status = "unresolved" if unresolved_guarantor_rows else "supported"
                 propositions = [
                     {
                         "artifact_subquestion_id": item["subquestion_id"],
@@ -3112,8 +3142,9 @@ def query_sop():
             elif unresolved_guarantor_rows:
                 support_status = "unresolved"
                 unresolved_reason = (
-                    "No admitted obligation-imposing provision matched every "
-                    "party-capacity tuple."
+                    "No complete source-grounded application passed the audit for "
+                    "every source role and party-capacity tuple. Unresolved "
+                    "applications are listed below."
                 )
                 support_note = unresolved_reason
                 answer = support_note
@@ -3163,14 +3194,15 @@ def query_sop():
                 else:
                     support_status = "not_established"
                     unresolved_reason = (
-                        "No admitted proposition directly answers this sub-question."
+                        item.get("conclusion_rejection")
+                        or "No admitted proposition directly answers this sub-question."
                     )
                     unresolved_subject = (
                         item.get("requested_question") or item["question"]
                     )
                     support_note = (
                         f"{NOT_ESTABLISHED} The retrieved SOP provisions do not "
-                        f"establish an answer to: {unresolved_subject}"
+                        f"establish an answer to: {unresolved_subject} {unresolved_reason}"
                     )
                     answer = support_note
                 no_provision = False
@@ -3943,8 +3975,14 @@ def generate_propositions(
     policy_issue: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     context = format_context(sources)
+    obligations = signer_obligations(policy_issue or {}, subquestion)
     quote_menu = {
         source.source_id: list(dict.fromkeys([
+            *[
+                obligation["quote"] for obligation in obligations
+                if obligation["source_id"] == source.source_id
+                and obligation["quote"] in source.chunk_text
+            ],
             *[
                 clause["quote"] for clause in (policy_issue or {}).get("clauses", [])
                 if clause.get("source_id") == source.source_id
@@ -3961,6 +3999,7 @@ def generate_propositions(
         "original_question": original_question,
         "subquestion": subquestion,
         "policy_issue": policy_issue or {},
+        "required_source_roles": obligations,
         "material_facts": material_facts,
         "admitted_source_ids": [source.source_id for source in sources],
         "context": [
@@ -3979,7 +4018,7 @@ def generate_propositions(
     )
     response = client.chat.completions.create(
         model=ANSWER_MODEL,
-        max_tokens=2400,
+        max_tokens=3200 if obligations else 2400,
         temperature=0,
         messages=[
             {
@@ -4018,11 +4057,30 @@ def generate_propositions(
                      "exceeding it. A necessary condition is not sufficient "
                      "authorization: 'may not X without Y' does not authorize every "
                      "X when Y exists. Apply other operative prerequisites and "
-                     "prohibitions before concluding permission. A Preference ban "
+                     "prohibitions before concluding permission. A permission conclusion "
+                     "requires a selected quote that affirmatively grants that authority; "
+                     "if the quotes only establish necessary conditions, leave overall "
+                     "permission unresolved and explain which condition is met in a "
+                     "supporting proposition instead. A Preference ban "
                      "does not establish that the facts meet its definition; apply "
                      "both and preserve consent qualifications. For who-signs "
                      "questions, quote the execution rule and identify signing "
-                     "capacity, not merely a guaranty threshold. Citation applications "
+                     "capacity, not merely a guaranty threshold. Cover EVERY obligation "
+                     "in REQUIRED SOURCE-ROLE COVERAGE with its own operative quote. "
+                     "Source roles absent from the facts must remain roles, not invented "
+                     "personal identities. Preserve their conditions. If a role cannot "
+                     "be established, explicitly identify it as unresolved; do not omit "
+                     "it while declaring the whole signer question supported. Citation applications "
+                     "When REQUIRED SOURCE-ROLE COVERAGE is nonempty, write one applied "
+                     "claim in EACH required source_role_applications slot and leave "
+                     "applied_conclusion empty. Each slot has its own source and quote "
+                     "ID; it cannot borrow authority from a different role. The "
+                     "slot text IS the fact-specific own-quote application; do not "
+                     "recite the quote or supply a separate application field. "
+                     "Show exact ownership arithmetic when relevant: meeting a "
+                     "threshold does not mean exceeding it. The combined claims "
+                     "will undergo the same conclusion and citation "
+                     "audit. Explain unnamed roles by capacity without inventing people. "
                      "must apply a specific stated fact, not copy or shorten the "
                      "quoted rule. Do not invent, paraphrase, or "
                      "take those fact quotes from the SOP. A Preference definition alone is not a "
@@ -4062,6 +4120,7 @@ def generate_propositions(
             {
                 "role": "user",
                 "content": (
+                    f"REQUIRED SOURCE-ROLE COVERAGE:\n{json.dumps(obligations)}\n\n"
                     f"ORIGINAL QUESTION:\n{original_question}\n\n"
                     f"SOURCE-DERIVED POLICY ISSUE:\n{json.dumps(policy_issue or {})}\n\n"
                     f"DISCRETE SUB-QUESTION:\n{subquestion}\n\n"
@@ -4084,6 +4143,7 @@ def generate_propositions(
                         "applied_conclusion": {"$ref": "#/$defs/conclusion_claim"},
                         "propositions": {"$ref": "#/$defs/claim_list"},
                         "other_issues": {"$ref": "#/$defs/claim_list"},
+                        "source_role_applications": source_role_schema(obligations, quote_menu),
                         "guarantor_rows": {"$ref": "#/$defs/guarantor_row_list"},
                          "stated_facts": {"type": "array", "items": {"type": "string"}},
                     },
@@ -4091,6 +4151,7 @@ def generate_propositions(
                         "applied_conclusion",
                         "propositions",
                         "other_issues",
+                        "source_role_applications",
                         "guarantor_rows",
                          "stated_facts",
                     ],
@@ -4195,6 +4256,10 @@ def generate_propositions(
         },
     )
     result = parse_json(response.choices[0].message.content or "")
+    if obligations:
+        result["applied_conclusion"] = assemble_source_role_claims(
+            result.get("source_role_applications") or {}, obligations, quote_menu
+        )
     conclusion = result.get("applied_conclusion")
     if isinstance(conclusion, dict):
         resolve_applied_quotes(conclusion, quote_menu)
@@ -4205,6 +4270,7 @@ def generate_propositions(
         "propositions": result.get("propositions", []),
         "other_issues": result.get("other_issues", []),
         "guarantor_rows": result.get("guarantor_rows", []),
+        "source_role_applications": result.get("source_role_applications", {}),
          "stated_facts": validated_stated_facts(original_question, result.get("stated_facts")),
     }
     app.logger.info(
@@ -4524,7 +4590,7 @@ def audit_propositions(
     original_question: str,
     candidates: list[dict[str, Any]],
     source_by_id: dict[int, RetrievedSource],
-) -> dict[int, dict[str, bool]]:
+) -> dict[int, dict[str, Any]]:
     if not candidates:
         return {}
     audit_items = []
@@ -4727,22 +4793,35 @@ def audit_propositions(
             )
         }
         for audit_index, candidate_index in application_checks.items():
-            if not candidate_admitted(checks.get(audit_index)):
+            application = audit_items[audit_index]
+            application_error = permission_scope_error({
+                "kind": "conclusion", "text": application["proposition"],
+                "citations": application["evidence"],
+            })
+            if application_error or not candidate_admitted(checks.get(audit_index)):
                 checks[candidate_index] = {
                     "entailment_supported": False,
                     "relevant_to_subquestion": False,
                     "admitted_for_render": False,
                     "citation_application_failed": True,
+                    "rejection_reason": application_error or "A source-specific explanation failed its own-quote audit.",
                 }
         for index, candidate in enumerate(candidates):
+            missing_obligations = missing_signer_obligations(candidate)
             scope_error = conclusion_scope_error(candidate) or percentage_comparison_error(
                 original_question, candidate.get("text", "")
+            ) or permission_scope_error(candidate) or (
+                "The signer answer does not cover every obligation-bearing source role: "
+                + ", ".join(target["subject"] for target in missing_obligations)
+                if missing_obligations else None
             )
             if scope_error:
                 checks[index] = {
                     "entailment_supported": False,
                     "relevant_to_subquestion": False,
                     "admitted_for_render": False,
+                    "rejection_reason": scope_error,
+                    "missing_obligations": missing_obligations,
                 }
                 app.logger.warning("Withholding incomplete applied conclusion: %s", scope_error)
             if candidate.get("kind") in {"conclusion", "proposition"}:
@@ -4768,6 +4847,7 @@ def audit_propositions(
                 ):
                     previous = checks.get(index, {})
                     checks[index] = {
+                        **previous,
                         "entailment_supported": previous.get(
                             "entailment_supported", False
                         ),
@@ -4781,6 +4861,7 @@ def audit_propositions(
             policy_issue = candidate.get("policy_issue") or {}
             if not policy_issue.get("text") or policy_issue.get("unresolved"):
                 checks[index] = {
+                    **checks.get(index, {}),
                     "entailment_supported": checks.get(index, {}).get(
                         "entailment_supported", False
                     ),
@@ -4795,6 +4876,7 @@ def audit_propositions(
                 continue
             previous = checks.get(index, {})
             checks[index] = {
+                **previous,
                 "entailment_supported": False,
                 "relevant_to_subquestion": previous.get(
                     "relevant_to_subquestion", True

@@ -25,4 +25,17 @@ Do not replace a rejected legal conclusion with an automatically admitted rule r
 
 **Why:** Live counterexamples exposed a covenant template denying expressly supplied written agreement, consent being treated as sufficient authorization, a rule against Preferences being treated as proof of the Preference trigger, and equality with a guaranty threshold being described as exceeding it. Unit-test totals hid these answer defects.
 
-**How to apply:** Prefer a clearly marked unresolved issue to a confident but unsupported answer. Review actual responses across changed fact patterns, including saved questions and visible claims; do not count green structural checks or an uncited source-chunk paragraph as a legal-accuracy pass. Avoid adding more hard-coded answer branches to paper over failed audit outcomes.
+**How to apply:** Prefer a clearly marked unresolved issue to a confident but unsupported answer. Review actual responses across changed fact patterns, including saved questions and visible claims; do not count green structural checks or an uncited source-chunk paragraph as a legal-accuracy pass. Treat a semantic auditor's approval as necessary but not sufficient: a permission claim still needs affirmative operative authority, and a complete signer answer still needs source-role coverage. These checks withhold unsupported claims; they must never generate a legal-answer fallback.
+
+Required source-role slots and restricted quote choices do not by themselves
+bound the meaning of the generated explanation.
+
+**Why:** A real trust response covered all source roles but added trustee
+execution to the ownership quote's application. The auditor approved it
+because that duty appeared elsewhere in the selected evidence.
+
+**How to apply:** Check every operative predicate in an application's actual
+text against its own quote. Separate another clause's duty from a legitimately
+declared trigger dependency; neither a correct overall paragraph nor a schema
+slot is proof that each explanation is grounded. Preserve failed real examples
+and report unresolved named-party cases as coverage failures, not legal passes.

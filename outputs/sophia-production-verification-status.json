@@ -32,8 +32,9 @@
       "login_url": "/api/login"
     }
   },
-  "expected_build_sha": "7f6d64de265556d519bd29d2238d504b4b92ab9f6f8a3fd5a8ee10ba76061891",
+  "expected_build_sha": "c3bbfe00f886711c40d97ddbbfe3b154e7f61f5b26b9206d937d7ca179a511c7",
   "published_build_matches_expected": false,
   "required_next_step": "Publish this build, then collect genuine authorized-session regression and non-allowlisted-account denial evidence. No production completion is claimed.",
-  "unsigned_query_recorded_at_utc": "2026-10-08T14:43:43Z"
+  "unsigned_query_recorded_at_utc": "2026-10-08T14:43:43Z",
+  "guide_prepared_at_utc": "2026-10-08T20:26:45.950024+00:00"
 }
