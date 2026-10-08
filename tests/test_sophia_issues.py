@@ -16,6 +16,11 @@ from sophia_issues import (
 from run_sophia_evals import evaluate
 
 CASE = json.loads((ROOT / "tests/fixtures/sophia_issue_evals.json").read_text())["cases"][0]
+BALANCE_CONSENT_CASE = next(
+    case for case in json.loads(
+        (ROOT / "tests/fixtures/sophia_issue_evals.json").read_text()
+    )["cases"] if case["id"] == "deposit-covenant-balance-and-consent-supplied"
+)
 
 
 class SophiaIssueTests(unittest.TestCase):
@@ -130,6 +135,9 @@ class SophiaIssueTests(unittest.TestCase):
         self.assertIsNotNone(conclusion)
         self.assertIn("required account balance", conclusion["text"])
         self.assertIn("SBA consent", conclusion["text"])
+        self.assertIn(
+            "The facts do not state", conclusion["citations"][0]["application"]
+        )
         self.assertEqual(
             [citation["quote"] for citation in conclusion["citations"]],
             [definition.chunk_text, authority_quote],
@@ -142,6 +150,101 @@ class SophiaIssueTests(unittest.TestCase):
                     citation["quote"], citation["application"], source.chunk_text
                 )
             )
+
+    def test_grounded_preference_application_preserves_supplied_balance_and_consent(self):
+        from types import SimpleNamespace
+
+        definition = SimpleNamespace(
+            source_id=3,
+            chunk_text=(
+                "Preference: (13 CFR § 120.10 7(a) and 504) Any arrangement giving "
+                "a Lender or a CDC a preferred position compared to SBA relating to "
+                "the making, servicing, or liquidation of a business loan with "
+                "respect to such things as repayment, collateral, guarantees, "
+                "control, maintenance of a compensating balance, purchase of a "
+                "Certificate of deposit or acceptance of a separate or companion "
+                "loan, without SBA’s consent."
+            ),
+        )
+        authority_quote = (
+            "A Lender may not take any action in connection with an SBA-guaranteed "
+            "loan that establishes a preference in favor of the Lender "
+            "(13 CFR § 120.411)."
+        )
+        authority = SimpleNamespace(source_id=4, chunk_text=authority_quote)
+        question = BALANCE_CONSENT_CASE["question"]
+        issue = preserve_compound_issues(question, [])[0]["question"]
+
+        conclusion = grounded_covenant_conclusion(
+            question, issue, [definition, authority]
+        )
+
+        self.assertIsNotNone(conclusion)
+        expected_facts = BALANCE_CONSENT_CASE["expected_supplied_facts"]
+        self.assertIn("$125,000", question)
+        self.assertIn("SBA has granted written consent", question)
+        for fact in expected_facts:
+            self.assertIn(fact.casefold(), conclusion["text"].casefold())
+        self.assertIn("$125,000", conclusion["text"])
+        self.assertIn("SBA written consent", conclusion["text"])
+        self.assertIn("supplied, not missing", conclusion["text"])
+        self.assertNotIn("The facts do not state a required account balance", conclusion["text"])
+        self.assertNotIn("The facts do not state whether SBA consent", conclusion["text"])
+        self.assertNotIn("is a prohibited Preference", conclusion["text"])
+        self.assertNotIn("is permitted", conclusion["text"])
+        for citation, source in zip(
+            conclusion["citations"], [definition, authority]
+        ):
+            self.assertIsNone(applied_evidence_error(
+                citation["quote"], citation["application"], source.chunk_text
+            ))
+        self.assertIn("$125,000", conclusion["citations"][0]["application"])
+        self.assertIn("SBA written consent", conclusion["citations"][0]["application"])
+
+        gap_note = "Not addressed by retrieved provisions for the separate rate issue."
+        eval_response = {
+            "summary": conclusion["text"] + " Interest-rate rules: " + gap_note,
+            "subanswers": [
+                {
+                    "requested_question": "Preference / compensating balance",
+                    "applied_conclusion": {
+                        **conclusion,
+                        "citations": [
+                            {
+                                **citation,
+                                "verified": True,
+                                "quote_located": True,
+                                "supports_conclusion": True,
+                                "source_chunk": source.chunk_text,
+                            }
+                            for citation, source in zip(
+                                conclusion["citations"], [definition, authority]
+                            )
+                        ],
+                    },
+                    "searched_terms": BALANCE_CONSENT_CASE["required_expansions"],
+                    "rejected_citations": [
+                        {"rejection_reason": "Non-applicable passage.", "supports_conclusion": False}
+                    ],
+                },
+                {
+                    "requested_question": "Interest-rate rules",
+                    "support_note": gap_note,
+                    "searched_terms": [],
+                },
+            ],
+            "sources": [
+                {"program_scope": ["general"], "supports_conclusion": True}
+            ],
+            "rejected_citations": [
+                {"rejection_reason": "Out of scope.", "supports_conclusion": False}
+            ],
+        }
+        checks = evaluate(BALANCE_CONSENT_CASE, eval_response)
+        self.assertTrue(checks["answer preserves supplied fact: $125,000"])
+        self.assertTrue(checks["answer preserves supplied fact: SBA written consent"])
+        self.assertTrue(checks["avoids forcing a Preference outcome"])
+        self.assertTrue(all(checks.values()), checks)
 
     def test_preference_search_expands_to_the_standalone_prohibition(self):
         terms = " ".join(expanded_search_terms(CASE["question"]))

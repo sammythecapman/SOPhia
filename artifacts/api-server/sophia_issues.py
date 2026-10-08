@@ -158,22 +158,79 @@ def grounded_covenant_conclusion(
         prohibition = locate(r"may not.*establishes? a preference")
         if not definition or not prohibition:
             return None
+        balance_match = re.search(r"\$\s*\d[\d,]*(?:\.\d{1,2})?", question)
+        balance_amount = None
+        if balance_match:
+            nearby = question[
+                max(0, balance_match.start() - 55):balance_match.end() + 55
+            ]
+            if re.search(r"\b(?:balance|deposit account|account)\b", nearby, re.I):
+                balance_amount = balance_match.group()
+        consent_supplied = bool(re.search(
+            r"\bSBA\b.{0,70}\b(?:has\s+)?(?:given|granted|provided|approved)\b"
+            r".{0,45}\b(?:written\s+)?consent\b",
+            question,
+            re.I,
+        ))
+
+        if balance_amount and consent_supplied:
+            fact_statement = (
+                f"The question specifies a required account balance of {balance_amount} "
+                "and SBA written consent to the covenant; those facts are supplied, "
+                "not missing. Whether the arrangement otherwise gives the lender a "
+                "preferred position compared with SBA is not established by those "
+                "facts alone."
+            )
+            definition_application = (
+                f"The question states a required account balance of {balance_amount} "
+                "and SBA written consent to this covenant, so neither fact is missing. "
+                "The quoted definition also turns on whether the arrangement gives "
+                "the lender a preferred position compared with SBA."
+            )
+        else:
+            missing_facts = []
+            if not balance_amount:
+                missing_facts.append("a required account balance")
+            if not consent_supplied:
+                missing_facts.append("whether SBA consent has been provided")
+            missing_statement = (
+                f"The facts do not state {' or '.join(missing_facts)}, so "
+                "those details remain unresolved. "
+                if missing_facts else ""
+            )
+            fact_statement = (
+                f"{missing_statement}Whether the arrangement gives the lender a "
+                "preferred position compared with SBA is not established by these "
+                "facts alone."
+            )
+            supplied_details = []
+            if balance_amount:
+                supplied_details.append(
+                    f"a required account balance of {balance_amount}"
+                )
+            if consent_supplied:
+                supplied_details.append("SBA written consent")
+            supplied_statement = (
+                f"The question supplies {' and '.join(supplied_details)}. "
+                if supplied_details else ""
+            )
+            definition_application = (
+                f"{supplied_statement}{missing_statement}The quoted definition "
+                "also turns on whether the arrangement gives the lender a preferred "
+                "position compared with SBA."
+            )
         return {
             "text": (
                 "The mandatory deposit-account covenant and rate penalty raise a "
                 "Preference/compensating-balance issue, separately from the interest-rate "
                 "issue. The admitted definition includes a preferred position involving "
                 "control or a compensating balance without SBA consent, and a separate "
-                "provision prohibits establishing a Preference. The facts do not state "
-                "a required account balance or SBA consent, so those qualifications "
-                "must be resolved rather than treating every deposit-account "
-                "relationship as automatically prohibited."
+                f"provision prohibits establishing a Preference. {fact_statement} "
+                "The cited provisions do not by themselves resolve the outcome for "
+                "this arrangement."
             ),
             "citations": [
-                citation(definition, "The proposed account covenant raises the quoted "
-                         "control/compensating-balance concern. The question does not "
-                         "state a required balance or SBA consent, which limits a "
-                         "definitive application of this definition."),
+                citation(definition, definition_application),
                 citation(prohibition, "If the deposit covenant gives the lender a "
                          "Preference within the cited definition, this operative "
                          "prohibition applies. The rate penalty does not remove "

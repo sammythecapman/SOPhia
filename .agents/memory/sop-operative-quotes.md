@@ -14,3 +14,9 @@ Check issue completeness against visible conclusions and explanations, not hidde
 **Why:** An eval initially accepted default-rate-only reasoning because the hidden source chunk contained Note-rate terminology. Structural pass/fail checks alone did not establish that the visible answer addressed the requested framing.
 
 **How to apply:** Preserve missing-fact qualifications and source-dependent, fail-closed applications. Do not force the expected legal outcome merely to make an eval pass.
+
+An explicit evidence gap and a missing fact are different states. Preserve stated facts even when the retrieved rules cannot establish a legal conclusion.
+
+**Why:** A live contrast question supplied an exact account balance and SBA consent, but its citations did not pass the issue-specific application audit. The answer needed to remain a gap without treating those facts as absent or manufacturing an outcome.
+
+**How to apply:** Evals should separately check known-fact preservation, false-missing language, and whether a conclusion is source-supported. Permit a properly worded evidence gap when application remains unestablished.

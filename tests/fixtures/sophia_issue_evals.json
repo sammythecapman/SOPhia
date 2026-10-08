@@ -25,6 +25,31 @@
       "allowed_support_programs": ["504", "general"],
       "required_expansions": [],
       "allow_explicit_gap": true
+    },
+    {
+      "id": "deposit-covenant-balance-and-consent-supplied",
+      "contrast_of": "deposit-covenant-rate-step-up",
+      "question": "A lender proposes a loan agreement requiring the Borrower to maintain its deposit accounts with the lender, with the loan interest rate increasing by 1.00% if the Borrower fails to do so. This covenant requires a minimum daily account balance of $125,000, and the SBA has granted written consent specifically to this requirement. Under SBA Loan Program Requirements, is such a provision permissible, or would it constitute a prohibited Preference or impermissible default rate?",
+      "issues": [
+        {"label": "Preference", "pattern": "preference|compensating balance", "operative_quote_pattern": "preference|compensating balance|preferred position"},
+        {"label": "Interest-rate rules", "pattern": "interest.rate|note.rate", "operative_quote_pattern": "default interest rates|spread.*(?:chang|adjust)|(?:note|interest).{0,80}(?:chang|adjust)|same spread"}
+      ],
+      "allowed_support_programs": ["general", "7a", "standard_7a"],
+      "required_expansions": [
+        "compensating balance",
+        "preferred position compared to SBA",
+        "13 CFR 120.10",
+        "13 CFR 120.411"
+      ],
+      "substance_pattern": "note.rate|spread|change.{0,35}(?:rate|interest)|(?:rate|interest).{0,35}change",
+      "expected_supplied_facts": ["$125,000", "SBA written consent"],
+      "expected_question_facts": ["$125,000", "SBA has granted written consent"],
+      "not_missing_patterns": [
+        "(?:facts|question) do not state.{0,80}(?:balance|SBA consent)",
+        "(?:balance|SBA consent) (?:is missing|remains unresolved|was not stated|was not provided)"
+      ],
+      "forbidden_preference_outcome_pattern": "\\b(?:is|constitutes|amounts to)\\s+(?:a\\s+)?(?:prohibited|impermissible|permitted)\\s+(?:SBA\\s+)?Preference\\b",
+      "allow_explicit_gap": true
     }
   ]
 }

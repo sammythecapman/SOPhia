@@ -85,6 +85,53 @@ def evaluate(case: dict, result: dict) -> dict[str, bool]:
     checks["Preference SBA query expansion"] = all(
         term.casefold() in terms.casefold() for term in case.get("required_expansions", [])
     )
+    if case.get("expected_supplied_facts"):
+        preference_answers = matches[0] if matches else []
+        has_applied_answer = any(
+            item.get("applied_conclusion") for item in preference_answers
+        )
+        answer_parts = [result.get("summary") or ""]
+        for item in preference_answers:
+            conclusion = item.get("applied_conclusion") or {}
+            answer_parts.extend([
+                item.get("answer") or "",
+                item.get("support_note") or "",
+                conclusion.get("text") or "",
+                *[
+                    citation.get("application") or ""
+                    for citation in conclusion.get("citations", [])
+                ],
+                *[
+                    citation.get("application") or ""
+                    for citation in item.get("rejected_citations", [])
+                ],
+            ])
+        answer_text = " ".join(str(part) for part in answer_parts)
+        question_facts = case.get(
+            "expected_question_facts", case["expected_supplied_facts"]
+        )
+        for fact_index, fact in enumerate(case["expected_supplied_facts"]):
+            if has_applied_answer:
+                checks[f"answer preserves supplied fact: {fact}"] = (
+                    fact.casefold() in answer_text.casefold()
+                )
+            elif explicit_gap:
+                question_fact = (
+                    question_facts[fact_index]
+                    if fact_index < len(question_facts) else fact
+                )
+                checks[f"case supplies contrast fact: {fact}"] = (
+                    question_fact.casefold() in case["question"].casefold()
+                )
+        for pattern in case.get("not_missing_patterns", []):
+            checks[f"supplied facts not called missing: {pattern}"] = not bool(
+                re.search(pattern, answer_text, re.I)
+            )
+        outcome_pattern = case.get("forbidden_preference_outcome_pattern")
+        if outcome_pattern:
+            checks["avoids forcing a Preference outcome"] = not bool(
+                re.search(outcome_pattern, answer_text, re.I)
+            )
     if case.get("substance_pattern"):
         rate_answers = matches[-1] if matches else []
         checks["substance over default-rate label"] = bool(rate_answers) and all(
