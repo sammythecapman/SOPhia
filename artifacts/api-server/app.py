@@ -27,6 +27,8 @@ from sophia_issues import (
     conclusion_scope_error,
     expanded_search_terms,
     grounded_covenant_conclusion,
+    preference_authority_clause,
+    preference_issue_requested,
     preserve_compound_issues,
     quote_options,
     resolve_applied_quotes,
@@ -204,13 +206,21 @@ def source_applicability(
 
 
 def evaluate_source_gate(
-    source: RetrievedSource, fact_text: str, fact_tags: dict[str, list[str]]
+    source: RetrievedSource,
+    fact_text: str,
+    fact_tags: dict[str, list[str]],
+    condition_text: str | None = None,
 ) -> dict[str, Any]:
-    """Evaluate every gate for a source before any source can be cited."""
+    """Evaluate source scope and conditions before any source can be cited.
+
+    ``condition_text`` scopes internal-condition checks to an identified
+    independent clause; the source's structured applicability tags still gate
+    the entire citation.
+    """
 
     applicable, applicability_reason = source_applicability(source, fact_tags)
     conditions_ok, condition_reason, condition_details = internal_conditions_evaluation(
-        source, fact_text, fact_tags
+        source, fact_text, fact_tags, condition_text=condition_text
     )
     return {
         "source_id": source.source_id,
@@ -219,16 +229,28 @@ def evaluate_source_gate(
         "condition_result": "passed" if conditions_ok else "failed",
         "condition_reason": condition_reason,
         "conditions": condition_details,
+        "condition_scope": "clause" if condition_text is not None else "source",
+        "condition_clause": condition_text,
         "admitted": bool(applicable and conditions_ok),
     }
 
 
 def internal_conditions_evaluation(
-    source: RetrievedSource, fact_text: str, fact_tags: dict[str, list[str]]
+    source: RetrievedSource,
+    fact_text: str,
+    fact_tags: dict[str, list[str]],
+    condition_text: str | None = None,
 ) -> tuple[bool, str | None, list[dict[str, Any]]]:
-    """Evaluate explicit conditions in a provision against the supplied facts."""
+    """Evaluate explicit conditions in a provision against the supplied facts.
 
-    lower = source.chunk_text.casefold()
+    When a responsive, independently applicable clause has been identified,
+    evaluate only that clause. Conditions in unrelated neighboring rules must
+    not disqualify it.
+    """
+
+    lower = (
+        condition_text if condition_text is not None else source.chunk_text
+    ).casefold()
     facts_lower = fact_text.casefold()
     checks: list[dict[str, Any]] = []
 
@@ -2558,7 +2580,14 @@ def query_sop():
                     ):
                         excluded_dimension = dimension
                         break
-                gate = evaluate_source_gate(source, fact_text, fact_tags)
+                condition_text = (
+                    preference_authority_clause(source.chunk_text)
+                    if preference_issue_requested(retrieval_seed)
+                    else None
+                )
+                gate = evaluate_source_gate(
+                    source, fact_text, fact_tags, condition_text=condition_text
+                )
                 gate_by_source_id[source.source_id] = gate
                 telemetry = {
                     "subquestion_id": subquestion_id,
@@ -2573,6 +2602,7 @@ def query_sop():
                     "conditions": gate["conditions"],
                     "condition_result": gate["condition_result"],
                     "condition_reason": gate["condition_reason"],
+                    "condition_scope": gate["condition_scope"],
                     "applicability_result": (
                         "passed" if gate["applicable"] else "failed"
                     ),
@@ -2601,6 +2631,9 @@ def query_sop():
                 prioritize_seller_note=bool(
                     SELLER_NOTE_TOPIC_RE.search(retrieval_seed)
                     and not has_guaranty_intent(retrieval_seed)
+                ),
+                prioritize_preference_authority=preference_issue_requested(
+                    retrieval_seed
                 ),
             )
             selected_ids = {source.source_id for source in ranked_sources}
@@ -3554,9 +3587,11 @@ def select_context_sources(
     sources: list[RetrievedSource],
     limit: int = MAX_CONTEXT_SOURCES,
     prioritize_seller_note: bool = False,
+    prioritize_preference_authority: bool = False,
 ) -> list[RetrievedSource]:
     """Keep immediate same-section neighbors together when trimming model context."""
     by_db_id = {source.db_id: source for source in sources}
+
     def seller_note_priority(source: RetrievedSource) -> int:
         if not prioritize_seller_note:
             return 0
@@ -3568,9 +3603,26 @@ def select_context_sources(
             return 1
         return 0
 
+    def preference_authority_priority(source: RetrievedSource) -> int:
+        if not prioritize_preference_authority:
+            return 0
+        if preference_authority_clause(source.chunk_text) is None:
+            return 0
+        if re.search(
+            r"Appendix 19:\s*7\(a\)\s+Collateral Requirements\s*>\s*General Requirements",
+            source.section_ref,
+            re.IGNORECASE,
+        ):
+            return 2
+        return 1
+
     ordered = sorted(
         sources,
-        key=lambda source: (seller_note_priority(source), source.similarity),
+        key=lambda source: (
+            seller_note_priority(source),
+            preference_authority_priority(source),
+            source.similarity,
+        ),
         reverse=True,
     )
     selected: list[RetrievedSource] = []
@@ -3869,6 +3921,29 @@ def retrieve_for_subquestion(
             (sop_version, corpus_sha256),
         ).fetchall()
         add_rows(collateral_rows)
+    if preference_issue_requested(retrieval_context):
+        preference_authority_rows = conn.execute(
+            """
+            SELECT id, sop_version, effective_date, page_number, section_ref,
+                   chunk_text, 1.0 AS similarity,
+                   transaction_types, entity_structures, party_roles, program_scopes,
+                   product_lines, loan_size_bands
+            FROM sop_chunks
+            WHERE sop_version = %s AND corpus_sha256 = %s
+              AND chunk_text ILIKE
+                  '%%establishes a preference in favor of the Lender%%'
+            ORDER BY CASE
+                       WHEN section_ref ILIKE
+                         '%%Appendix 19: 7(a) Collateral Requirements > General Requirements%%'
+                       THEN 0
+                       ELSE 1
+                     END,
+                     id
+            LIMIT 12
+            """,
+            (sop_version, corpus_sha256),
+        ).fetchall()
+        add_rows(preference_authority_rows)
     if re.search(
         r"seller[-\s]?financ|seller[-\s]?note|standby|subordinated debt|equity injection|"
         r"project cost|startup|start-up|injection",
@@ -4199,6 +4274,19 @@ def validate_candidate_citations(
                 continue
             gate = candidate.get("gate_by_source_id", {}).get(source_id)
             if not isinstance(gate, dict) or not gate.get("admitted"):
+                continue
+            scoped_clause = gate.get("condition_clause")
+            if (
+                gate.get("condition_scope") == "clause"
+                and (not isinstance(scoped_clause, str) or quote != scoped_clause)
+            ):
+                reason = (
+                    "Citation is not the independent clause whose conditions "
+                    "were evaluated."
+                )
+                candidate.setdefault("rejected_citations", []).append(
+                    build_citation(source, "", False, rejection_reason=reason)
+                )
                 continue
             application = citation.get("application")
             if candidate.get("kind") == "conclusion" and not isinstance(application, str):

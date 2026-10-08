@@ -11,6 +11,7 @@ from sophia_issues import (
     applied_evidence_error, preserve_compound_issues, synthesize_bottom_line,
     quote_options, resolve_applied_quotes,
     grounded_covenant_conclusion, conclusion_scope_error,
+    expanded_search_terms, preference_authority_clause,
 )
 from run_sophia_evals import evaluate
 
@@ -85,6 +86,68 @@ class SophiaIssueTests(unittest.TestCase):
             self.assertIsNone(applied_evidence_error(
                 citation["quote"], citation["application"], source.chunk_text
             ))
+
+    def test_grounded_preference_application_requires_definition_and_prohibition(self):
+        from types import SimpleNamespace
+
+        definition = SimpleNamespace(
+            source_id=3,
+            chunk_text=(
+                "Preference: (13 CFR § 120.10 7(a) and 504) Any arrangement giving "
+                "a Lender or a CDC a preferred position compared to SBA relating to "
+                "the making, servicing, or liquidation of a business loan with "
+                "respect to such things as repayment, collateral, guarantees, "
+                "control, maintenance of a compensating balance, purchase of a "
+                "Certificate of deposit or acceptance of a separate or companion "
+                "loan, without SBA’s consent."
+            ),
+        )
+        authority_quote = (
+            "A Lender may not take any action in connection with an SBA-guaranteed "
+            "loan that establishes a preference in favor of the Lender "
+            "(13 CFR § 120.411)."
+        )
+        authority = SimpleNamespace(
+            source_id=4,
+            chunk_text=(
+                authority_quote
+                + "\nFor changes of ownership, see Appendix 15."
+            ),
+        )
+        issue = preserve_compound_issues(CASE["question"], [])[0]["question"]
+
+        self.assertIsNone(preference_authority_clause(definition.chunk_text))
+        self.assertEqual(
+            preference_authority_clause(authority.chunk_text), authority_quote
+        )
+        self.assertIsNone(
+            grounded_covenant_conclusion(CASE["question"], issue, [definition])
+        )
+        conclusion = grounded_covenant_conclusion(
+            CASE["question"], issue, [definition, authority]
+        )
+
+        self.assertIsNotNone(conclusion)
+        self.assertIn("required account balance", conclusion["text"])
+        self.assertIn("SBA consent", conclusion["text"])
+        self.assertEqual(
+            [citation["quote"] for citation in conclusion["citations"]],
+            [definition.chunk_text, authority_quote],
+        )
+        for citation, source in zip(
+            conclusion["citations"], [definition, authority]
+        ):
+            self.assertIsNone(
+                applied_evidence_error(
+                    citation["quote"], citation["application"], source.chunk_text
+                )
+            )
+
+    def test_preference_search_expands_to_the_standalone_prohibition(self):
+        terms = " ".join(expanded_search_terms(CASE["question"]))
+        self.assertIn("13 CFR 120.10", terms)
+        self.assertIn("13 CFR 120.411", terms)
+        self.assertIn("establishes a preference in favor of the Lender", terms)
 
     def test_default_only_and_definition_only_answers_fail_closed(self):
         self.assertIsNotNone(conclusion_scope_error({

@@ -75,6 +75,7 @@ from app import (  # noqa: E402
     fetch_adjacent_chunk_rows,
     has_guaranty_intent,
     internal_conditions_check,
+    retrieve_for_subquestion,
     select_context_sources,
     unresolved_adjacent_trigger,
     validate_candidate_citations,
@@ -842,6 +843,170 @@ class ApplicabilityRegressionTests(unittest.TestCase):
         self.assertEqual(gate["condition_result"], "failed")
         self.assertFalse(gate["admitted"])
         self.assertTrue(gate["conditions"])
+
+    def test_preference_clause_gate_ignores_neighbor_condition_but_keeps_scope(self):
+        authority = (
+            "A Lender may not take any action in connection with an SBA-guaranteed "
+            "loan that establishes a preference in favor of the Lender "
+            "(13 CFR § 120.411)."
+        )
+        source = RetrievedSource(
+            db_id=334,
+            source_id=34,
+            sop_version="SOP 50 10 8.1",
+            effective_date="2026-10-01",
+            page_number=390,
+            section_ref=(
+                "Appendices > Appendix 19: 7(a) Collateral Requirements > "
+                "General Requirements"
+            ),
+            chunk_text=f"{authority}\nFor changes of ownership, see Appendix 15.",
+            similarity=1.0,
+            program_scopes=("7a",),
+        )
+        facts = classify_question(
+            "A 7(a) change of ownership has a mandatory deposit-account covenant."
+        )
+        fact_text = (
+            "A 7(a) change of ownership has a mandatory deposit-account covenant."
+        )
+
+        whole_chunk_gate = evaluate_source_gate(source, fact_text, facts)
+        clause_gate = evaluate_source_gate(
+            source, fact_text, facts, condition_text=authority
+        )
+
+        self.assertFalse(whole_chunk_gate["admitted"])
+        self.assertEqual(whole_chunk_gate["condition_result"], "failed")
+        self.assertTrue(clause_gate["applicable"])
+        self.assertTrue(clause_gate["admitted"])
+        self.assertEqual(clause_gate["condition_scope"], "clause")
+        self.assertEqual(clause_gate["condition_clause"], authority)
+
+        wrong_clause_candidate = {
+            "kind": "proposition",
+            "text": "The Preference prohibition applies.",
+            "citations": [{
+                "source_id": source.source_id,
+                "quote": "For changes of ownership, see Appendix 15.",
+            }],
+            "applicable_source_ids": [source.source_id],
+            "gate_by_source_id": {source.source_id: clause_gate},
+        }
+        self.assertEqual(
+            validate_candidate_citations(
+                [wrong_clause_candidate], {source.source_id: source}
+            ),
+            [],
+        )
+        self.assertIn("rejected_citations", wrong_clause_candidate)
+
+        wrong_program_gate = evaluate_source_gate(
+            source,
+            "A 504 loan has a mandatory deposit-account covenant.",
+            classify_question("A 504 loan has a mandatory deposit-account covenant."),
+            condition_text=authority,
+        )
+        self.assertFalse(wrong_program_gate["applicable"])
+        self.assertFalse(wrong_program_gate["admitted"])
+
+        transaction_scoped_source = RetrievedSource(
+            **{
+                **source.__dict__,
+                "transaction_types": ("change_of_ownership",),
+            }
+        )
+        startup_facts = classify_question(
+            "A 7(a) startup has a mandatory deposit-account covenant."
+        )
+        scoped_gate = evaluate_source_gate(
+            transaction_scoped_source,
+            "A 7(a) startup has a mandatory deposit-account covenant.",
+            startup_facts,
+            condition_text=authority,
+        )
+        self.assertFalse(scoped_gate["applicable"])
+        self.assertFalse(scoped_gate["admitted"])
+
+    def test_preference_retrieval_directly_fetches_collateral_prohibition(self):
+        authority = (
+            "Adequacy of collateral\nA Lender may not take any action in connection "
+            "with an SBA-guaranteed loan that establishes a preference in favor of "
+            "the Lender (13 CFR § 120.411)."
+        )
+        row = (
+            334,
+            "SOP 50 10 8.1",
+            "2026-10-01",
+            390,
+            "Appendices > Appendix 19: 7(a) Collateral Requirements > General Requirements",
+            authority,
+            1.0,
+            [],
+            [],
+            [],
+            ["7a"],
+            [],
+            [],
+        )
+
+        class Cursor:
+            def __init__(self, rows):
+                self.rows = rows
+
+            def fetchall(self):
+                return self.rows
+
+        class Connection:
+            def __init__(self):
+                self.statements = []
+
+            def execute(self, statement, parameters=()):
+                self.statements.append(statement)
+                if "establishes a preference in favor of the Lender" in statement:
+                    return Cursor([row])
+                return Cursor([])
+
+        class Embeddings:
+            @staticmethod
+            def create(**_kwargs):
+                return SimpleNamespace(
+                    data=[SimpleNamespace(embedding=[0.0])]
+                )
+
+        conn = Connection()
+        sources = retrieve_for_subquestion(
+            conn,
+            SimpleNamespace(embeddings=Embeddings()),
+            "Preference / compensating balance: may a lender require deposit accounts?",
+            sop_version="SOP 50 10 8.1",
+            corpus_sha256="unit-test-sha256",
+        )
+
+        self.assertTrue(any(
+            "establishes a preference in favor of the Lender" in statement
+            for statement in conn.statements
+        ))
+        self.assertEqual([source.db_id for source in sources], [334])
+        self.assertIn("establishes a preference in favor", sources[0].chunk_text)
+
+        unrelated = [
+            RetrievedSource(
+                db_id=1000 + index,
+                source_id=1000 + index,
+                sop_version="SOP 50 10 8.1",
+                effective_date="2026-10-01",
+                page_number=390,
+                section_ref=f"Unrelated section {index}",
+                chunk_text=f"Unrelated evidence {index}.",
+                similarity=1.0,
+            )
+            for index in range(18)
+        ]
+        selected = select_context_sources(
+            [*unrelated, sources[0]], prioritize_preference_authority=True
+        )
+        self.assertIn(sources[0], selected)
 
     def test_candidate_validation_rechecks_recorded_gate(self):
         source = RetrievedSource(

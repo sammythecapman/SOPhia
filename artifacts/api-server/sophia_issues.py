@@ -8,6 +8,8 @@ from typing import Any
 PREFERENCE_SEARCHES = [
     "Preference compensating balance preferred position compared to SBA 13 CFR 120.10",
     "Lender deposit account requirement prohibited Preference compensating balances",
+    "13 CFR 120.411 collateral adequacy a Lender may not take any action that establishes a preference in favor of the Lender",
+    "General 7(a) collateral requirements prohibition on establishing a preference in favor of the Lender",
 ]
 RATE_SEARCHES = [
     "General Policy on Interest Rates post-disbursement changes Note rate spread",
@@ -15,6 +17,15 @@ RATE_SEARCHES = [
 ]
 DEPOSIT_RE = re.compile(r"deposit accounts?|compensating balances?", re.I)
 RATE_RE = re.compile(r"interest rate|rate (?:increase|step[- ]?up)|default rate", re.I)
+PREFERENCE_RE = re.compile(r"\bpreference\b|compensating balances?", re.I)
+PREFERENCE_AUTHORITY_RE = re.compile(
+    r"\bmay not take any action\b.*\bestablish(?:es)? a preference in favor of the lender\b",
+    re.I,
+)
+
+
+def preference_issue_requested(text: str) -> bool:
+    return bool(PREFERENCE_RE.search(text))
 
 
 def preserve_compound_issues(
@@ -69,6 +80,15 @@ def sentences(text: str) -> list[str]:
         for part in re.split(r"(?<=[.!?])\s+(?=[A-Z\"“])", text.strip())
         if part.strip()
     ]
+
+
+def preference_authority_clause(text: str) -> str | None:
+    """Return only the standalone collateral prohibition, if this source has it."""
+    for line in text.splitlines():
+        for sentence in sentences(line):
+            if PREFERENCE_AUTHORITY_RE.search(sentence):
+                return sentence
+    return None
 
 
 def applied_evidence_error(quote: str, application: str, source: str) -> str | None:
