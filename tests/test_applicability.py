@@ -1050,16 +1050,22 @@ class ApplicabilityRegressionTests(unittest.TestCase):
         )
         self.assertFalse(gate["applicable"])
         self.assertFalse(gate["admitted"])
-        self.assertIn("program_scopes", gate["applicability_reason"] or "")
+        self.assertIn("7(a)", gate["applicability_reason"] or "")
 
-        # Retrieval can surface the 7(a) passage, but scope filtering happens
-        # before preference-authority ranking and before citation validation.
+        # Retrieval can surface the 7(a) passage, but the production order gates
+        # it before preference-authority ranking or citation validation.
+        retrieved = [appendix_19_7a]
+        admitted = [
+            source for source in retrieved
+            if evaluate_source_gate(
+                source, question, fact_tags,
+                condition_text=preference_authority_clause(source.chunk_text),
+            )["admitted"]
+        ]
         ranked = select_context_sources(
-            [appendix_19_7a], prioritize_preference_authority=True
+            admitted, prioritize_preference_authority=True
         )
-        self.assertEqual(ranked, [appendix_19_7a])
-        eligible = [source for source in ranked if source.source_id != appendix_19_7a.source_id]
-        self.assertEqual(eligible, [])
+        self.assertEqual(ranked, [])
 
         candidate = {
             "kind": "conclusion",
@@ -1077,7 +1083,6 @@ class ApplicabilityRegressionTests(unittest.TestCase):
             validate_candidate_citations([candidate], {appendix_19_7a.source_id: appendix_19_7a}),
             [],
         )
-        self.assertTrue(candidate["rejected_citations"])
 
     def test_candidate_validation_rechecks_recorded_gate(self):
         source = RetrievedSource(

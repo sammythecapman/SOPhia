@@ -170,7 +170,7 @@ class SophiaIssueTests(unittest.TestCase):
     def test_evaluator_does_not_pass_empty_answers(self):
         checks = evaluate(CASE, {"subanswers": [], "sources": []})
         self.assertFalse(checks["distinct sub-issues"])
-        self.assertFalse(checks["applied citations have verified quotes and explanations"])
+        self.assertFalse(checks["applied citations verified or permitted explicit gap"])
         self.assertFalse(checks["rejected evidence includes reasons"])
 
     def test_evaluator_cannot_use_hidden_chunk_text_as_substance_framing(self):

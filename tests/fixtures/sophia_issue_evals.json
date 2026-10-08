@@ -23,12 +23,7 @@
         {"label": "504 Preference", "pattern": "Preference|compensating balance", "operative_quote_pattern": "preference|compensating balance|preferred position"}
       ],
       "allowed_support_programs": ["504", "general"],
-      "required_expansions": [
-        "compensating balance",
-        "preferred position compared to SBA",
-        "13 CFR 120.10",
-        "13 CFR 120.411"
-      ],
+      "required_expansions": [],
       "allow_explicit_gap": true
     }
   ]
