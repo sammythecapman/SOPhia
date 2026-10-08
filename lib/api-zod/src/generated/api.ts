@@ -14,6 +14,7 @@ import * as zod from 'zod';
  */
 export const healthCheckResponseSourceSha256RegExp = new RegExp('^[a-f0-9]{64}$');
 
+export const healthCheckResponseBuildShaRegExp = new RegExp('^[a-f0-9]{64}$');
 
 
 export const HealthCheckResponse = zod.object({
@@ -22,7 +23,10 @@ export const HealthCheckResponse = zod.object({
   "effective_date": zod.coerce.date(),
   "source_url": zod.string().url(),
   "source_sha256": zod.string().regex(healthCheckResponseSourceSha256RegExp),
-  "chunk_count": zod.number().int().min(1)
+  "chunk_count": zod.number().int().min(1),
+  "build_sha": zod.string().regex(healthCheckResponseBuildShaRegExp),
+  "build_sha_kind": zod.enum(['source-content-sha256']),
+  "git_commit_sha": zod.string().nullable()
 })
 
 
@@ -85,6 +89,7 @@ export const QuerySopResponse = zod.object({
   "no_provision": zod.boolean(),
   "support_status": zod.enum(['supported', 'not_established', 'not_applicable', 'no_responsive_provision', 'retrieval_empty', 'unresolved']),
   "support_note": zod.string().nullable(),
+  "stated_facts": zod.array(zod.string()).optional(),
   "searched_terms": zod.array(zod.string()),
   "rejected_citations": zod.array(zod.object({
   "source_id": zod.number().int(),

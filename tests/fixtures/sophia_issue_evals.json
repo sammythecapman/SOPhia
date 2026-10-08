@@ -14,7 +14,8 @@
         "13 CFR 120.10",
         "13 CFR 120.411"
       ],
-      "substance_pattern": "note.rate|spread|change.{0,35}(?:rate|interest)|(?:rate|interest).{0,35}change"
+      "substance_pattern": "note.rate|spread|change.{0,35}(?:rate|interest)|(?:rate|interest).{0,35}change",
+      "allow_explicit_gap": true
     },
     {
       "id": "504-deposit-account-preference-scope",
@@ -42,14 +43,66 @@
         "13 CFR 120.411"
       ],
       "substance_pattern": "note.rate|spread|change.{0,35}(?:rate|interest)|(?:rate|interest).{0,35}change",
-      "expected_supplied_facts": ["$125,000", "SBA written consent"],
-      "expected_question_facts": ["$125,000", "SBA has granted written consent"],
-      "not_missing_patterns": [
-        "(?:facts|question) do not state.{0,80}(?:balance|SBA consent)",
-        "(?:balance|SBA consent) (?:is missing|remains unresolved|was not stated|was not provided)"
-      ],
-      "forbidden_preference_outcome_pattern": "\\b(?:is|constitutes|amounts to)\\s+(?:a\\s+)?(?:prohibited|impermissible|permitted)\\s+(?:SBA\\s+)?Preference\\b",
+      "fact_expectations": [{
+        "issue_pattern": "Preference|compensating balance",
+        "present_patterns": ["\\$125,000", "SBA.{0,45}(?:granted|written).{0,25}consent"],
+        "absent_patterns": ["(?:facts|question) do not state.{0,80}(?:balance|SBA consent)", "(?:balance|SBA consent) (?:is missing|remains unresolved|was not stated|was not provided)"]
+      }],
       "allow_explicit_gap": true
+    },
+    {
+      "id": "variable-rate-specific-written-agreement",
+      "forbidden_claims": [
+        {
+          "label": "written consent alone proves this increase is valid",
+          "pattern": "(?:agreement|consent).{0,220}(?:is valid under the note.rate rules|authorizes this covenant.triggered increase|makes.{0,30}permissible)"
+        }
+      ],
+      "question": "For a Standard 7(a) variable-rate loan, the lender requires the Borrower to maintain deposit accounts with the lender. The loan's Note spread increases by 1.00% if the Borrower fails to maintain those accounts. The Borrower has signed a written agreement specifically consenting to this 1.00% spread change. Does that agreement authorize this covenant-triggered increase under the Note-rate rules, and is the deposit-account requirement a prohibited Preference?",
+      "issues": [
+        {"label": "Preference", "pattern": "preference|compensating balance"},
+        {"label": "Interest-rate rules", "pattern": "interest.rate|note.rate"}
+      ],
+      "allowed_support_programs": ["general", "7a", "standard_7a"],
+      "required_expansions": ["13 CFR 120.10", "13 CFR 120.411"],
+      "allow_explicit_gap": true,
+      "fact_expectations": [{
+        "issue_pattern": "interest.rate|note.rate",
+        "present_patterns": ["variable.rate", "(?:signed|written agreement).{0,65}(?:agreement|consent|spread change)"],
+        "absent_patterns": ["facts do not establish the rate structure", "question does not establish whether.{0,30}(?:agreement|requirement)", "(?:agreement|rate structure) (?:is missing|is unstated|was not provided)"]
+      }]
+    },
+    {
+      "id": "variable-rate-no-written-agreement",
+      "question": "For a Standard 7(a) variable-rate loan, the lender requires the Borrower to maintain deposit accounts with the lender. The loan's Note spread increases by 1.00% if the Borrower fails to maintain those accounts. The Borrower has not signed any written agreement to this spread change. Is the covenant-triggered increase authorized under the Note-rate rules, and is the deposit-account requirement a prohibited Preference?",
+      "issues": [
+        {"label": "Preference", "pattern": "preference|compensating balance"},
+        {"label": "Interest-rate rules", "pattern": "interest.rate|note.rate"}
+      ],
+      "allowed_support_programs": ["general", "7a", "standard_7a"],
+      "required_expansions": ["13 CFR 120.10", "13 CFR 120.411"],
+      "allow_explicit_gap": true,
+      "fact_expectations": [{
+        "issue_pattern": "interest.rate|note.rate",
+        "present_patterns": ["variable.rate", "has not signed|no written agreement|absence of.{0,15}written agreement"],
+        "absent_patterns": ["facts do not establish the rate structure", "whether.{0,20}(?:written agreement|agreement) (?:exists|was signed)"]
+      }]
+    },
+    {
+      "id": "fixed-rate-specific-written-agreement",
+      "question": "For a Standard 7(a) fixed-rate loan, the lender requires the Borrower to maintain deposit accounts with the lender. The loan's Note rate increases by 1.00% if the Borrower fails to maintain those accounts. The Borrower has signed a written agreement specifically consenting to this 1.00% Note-rate change. Does that agreement authorize this covenant-triggered increase under the fixed-rate rules, and is the deposit-account requirement a prohibited Preference?",
+      "issues": [
+        {"label": "Preference", "pattern": "preference|compensating balance"},
+        {"label": "Interest-rate rules", "pattern": "interest.rate|note.rate"}
+      ],
+      "allowed_support_programs": ["general", "7a", "standard_7a"],
+      "required_expansions": ["13 CFR 120.10", "13 CFR 120.411"],
+      "allow_explicit_gap": true,
+      "fact_expectations": [{
+        "issue_pattern": "interest.rate|note.rate",
+        "present_patterns": ["fixed.rate", "(?:signed|written agreement).{0,65}(?:agreement|consent|Note.rate change)"],
+        "absent_patterns": ["facts do not establish the rate structure", "(?:the|this) loan is variable.rate"]
+      }]
     }
   ]
 }

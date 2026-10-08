@@ -1,0 +1,39 @@
+{
+  "recorded_at_utc": "2026-10-08T15:14:28.857792+00:00",
+  "target": "https://SOP-hia.replit.app",
+  "status": "INCOMPLETE",
+  "authenticated_regression": {
+    "status": "NOT_RUN",
+    "reason": "Requires a genuine authorized browser session."
+  },
+  "trust_aggregation_hand_review": {
+    "status": "NOT_RUN",
+    "reason": "No authenticated production response has been captured."
+  },
+  "non_allowlisted_account_403": {
+    "status": "NOT_RUN",
+    "reason": "Requires a real authenticated non-allowlisted account; unsigned 401 does not prove this."
+  },
+  "public_health": {
+    "http_status": 200,
+    "body": {
+      "chunk_count": 395,
+      "effective_date": "2026-10-01",
+      "sop_version": "SOP 50 10 8.1",
+      "source_sha256": "0fb0c4692cf529380827746e5fe812e42ea82b6f6fdf97a71d1093677d963183",
+      "source_url": "https://www.sba.gov/document/sop-50-10-lender-development-company-loan-programs",
+      "status": "ok"
+    }
+  },
+  "unsigned_query": {
+    "http_status": 401,
+    "body": {
+      "error": "Authentication required.",
+      "login_url": "/api/login"
+    }
+  },
+  "expected_build_sha": "7f6d64de265556d519bd29d2238d504b4b92ab9f6f8a3fd5a8ee10ba76061891",
+  "published_build_matches_expected": false,
+  "required_next_step": "Publish this build, then collect genuine authorized-session regression and non-allowlisted-account denial evidence. No production completion is claimed.",
+  "unsigned_query_recorded_at_utc": "2026-10-08T14:43:43Z"
+}

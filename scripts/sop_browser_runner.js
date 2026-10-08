@@ -11,11 +11,12 @@
   const control = {running: true, stop: () => controller.abort()};
   window.__sophiaProductionCapture = control;
   const report = {
-    format: "sophia-browser-capture-v1",
+    format: "sophia-browser-capture-v2",
     recorded_at_utc: new Date().toISOString(),
     target: config.target,
     expected_source_sha256: config.sha256,
     expected_chunk_count: config.chunkCount,
+    expected_build_sha: config.buildSha,
     authenticated_user_confirmed: false,
     corpus: null,
     unauthenticated_check: null,
@@ -79,9 +80,13 @@
     console.info("SOPhia capture started. Keep this tab open. Responses require policy auditing.");
     const health = await request("/api/healthz");
     report.corpus = health.body;
+    report.health_before = health.body;
     if (health.status !== 200 || health.body.source_sha256 !== config.sha256 ||
         health.body.chunk_count !== config.chunkCount || health.body.status !== "ok") {
       throw new Error("Corpus gate failed. No regression queries were sent.");
+    }
+    if (!config.buildSha || health.body.build_sha !== config.buildSha) {
+      throw new Error("Build SHA gate failed. No regression queries were sent.");
     }
     const auth = await request("/api/auth/user");
     // Save only a boolean, never identity data or session information.
@@ -132,6 +137,14 @@
         item.error = String(error.message || error);
         throw error;
       }
+    }
+    const finalHealth = await request("/api/healthz");
+    report.health_after = finalHealth.body;
+    if (finalHealth.status !== 200 || finalHealth.body.status !== "ok" ||
+        finalHealth.body.chunk_count !== config.chunkCount ||
+        finalHealth.body.build_sha !== config.buildSha ||
+        finalHealth.body.source_sha256 !== config.sha256) {
+      throw new Error("Build or corpus changed during capture. This is not a single-build regression.");
     }
     report.completed = true;
     console.info("SOPhia responses collected. Upload the downloaded JSON for policy/citation audit.");

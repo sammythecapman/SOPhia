@@ -19,16 +19,23 @@ To reevaluate saved responses without model calls:
 uv run python scripts/run_sophia_evals.py --response path/to/answer.json
 ```
 
-The input can be one raw API answer, or an object mapping case IDs to answers.
+The input can be a complete saved report or an object mapping case IDs to answers.
+A raw API answer is accepted only with a single-case fixture file; it cannot be
+reused for other questions. Missing saved answers fail instead of silently inheriting
+another case's response. The report records fixture/evaluator hashes, request questions,
+response hashes, timestamps, and the health endpoint's build SHA before and after.
 Add cases to `tests/fixtures/sophia_issue_evals.json`, with a question, independently
 labeled issue patterns, allowed supporting program tags, required query-expansion
 terms, and an optional substance-framing pattern. Do not store credentials,
 cookies, or private borrower facts in fixtures.
 
-An explicit unsupported issue is an acceptable coverage result. The quote check
-is deliberately nonvacuous: a response with no applied citations fails that
-check. These are structural grounding checks, not a substitute for a lender's
-hand-review of legal interpretation and factual application.
+An explicit unsupported issue is an acceptable coverage result when its fixture
+permits a gap. Supplied-fact checks still inspect the visible answer on that path;
+they cannot pass by finding the fact only in the input fixture or rejected evidence.
+These are structural grounding checks, not a substitute for a lender's
+hand-review of whether the returned answer actually resolves the requested
+issue. A report can pass all structural checks while every sub-answer is
+unresolved; do not describe that as a legal-accuracy or demo pass.
 
 ## Program metadata
 
@@ -52,19 +59,25 @@ Do not substitute a production connection string. It changes only program
 metadata; it does not ingest, delete chunks, change the corpus hash, or re-embed.
 Publishing remains a separate step.
 
-## Results for the supplied deposit-account / rate-step-up case
+## Results and review
 
-The development live eval passed all 14 checks. The rate issue uses exact
-operative spread-change and default-rate quotes, includes fact-specific
-explanations, and preserves missing rate-structure and agreement facts.
-The Preference issue is visibly **Not addressed by retrieved provisions**:
-the system does not treat a retrieved definition alone as sufficient
-prohibiting authority. Explicit gaps are accepted by the requested coverage
-checks, and are not represented as established legal conclusions.
+Fixtures can include `forbidden_claims` with a label and regex for a reproduced
+unsupported visible claim. The current live signed-agreement response fails
+the consent-sufficiency guard; the saved report records that failure. A lexical
+counterexample guard is not a complete legal entailment audit. See
+`outputs/sophia-answer-review.md` for the remaining semantic and signer-coverage
+defects before calling this build demo-ready.
 
-The accompanying Python suite passed 68 tests, and the generated API
-contracts and SOPhia frontend passed TypeScript checking. The metadata
-refresh checked 395 chunks and updated 341 program-tag records in
-development; chunk text, embeddings, and corpus hash were unchanged.
-Production authentication and deployment are not tested by this development
-eval.
+The earlier single-case “14/14” claim was stale and is withdrawn. Read the current
+case-by-case report rather than a historical total. The default fixture now includes
+the three original questions plus variable-rate/signed agreement,
+variable-rate/no agreement, and fixed-rate/signed agreement counterexamples.
+
+The covenant legal-answer template has been removed. Stated facts come from
+validated exact quotes of the user's question, and legal claims still require
+operative source quotations and issue-specific application auditing.
+
+See `outputs/sophia-answer-review.md` for the separate review of real answers.
+Production proof belongs in captured authenticated results and a real-account
+403 record. `outputs/sophia-production-verification-status.json` is explicitly
+incomplete until those exist; the HTML file is only a capture guide.

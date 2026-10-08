@@ -21,12 +21,15 @@ from applicability import (
 )
 from auth import configure_auth, current_user, require_auth
 from db import connection
+from build_info import read_build_info
 from source_metadata import canonicalize_source_url
 from sophia_issues import (
     applied_evidence_error,
     conclusion_scope_error,
     expanded_search_terms,
-    grounded_covenant_conclusion,
+    validated_stated_facts,
+    trust_ownership_arithmetic,
+    percentage_comparison_error,
     preference_authority_clause,
     preference_issue_requested,
     preserve_compound_issues,
@@ -38,6 +41,7 @@ from sophia_issues import (
 
 app = Flask(__name__)
 configure_auth(app)
+BUILD_INFO = read_build_info()
 
 EMBEDDING_MODEL = "text-embedding-3-small"
 ANSWER_MODEL = os.getenv("OPENAI_CHAT_MODEL", "gpt-4o-mini")
@@ -2445,6 +2449,7 @@ def health():
             "source_url": CORPUS_METADATA["source_url"],
             "source_sha256": CORPUS_METADATA["sha256"],
             "chunk_count": CORPUS_METADATA["chunk_count"],
+            **BUILD_INFO,
         }
     )
 
@@ -2677,25 +2682,12 @@ def query_sop():
             generated = generate_propositions(
                 client,
                 question,
-                retrieval_seed,
+                item.get("requested_question") or retrieval_seed,
                 list(dict.fromkeys([question, *item.get("material_facts", [])])),
                 applicable_sources,
                 subquestion_id,
                 policy_issue,
             )
-            deterministic_conclusion = deterministic_applied_conclusion(
-                question,
-                retrieval_seed,
-                applicable_sources,
-            )
-            if deterministic_conclusion:
-                generated["applied_conclusion"] = deterministic_conclusion
-            if item.get("focused_retrieval"):
-                grounded_conclusion = grounded_covenant_conclusion(
-                    question, retrieval_seed, applicable_sources
-                )
-                if grounded_conclusion:
-                    generated["applied_conclusion"] = grounded_conclusion
             # Rows are built once from the pooled admitted provisions below.
             if has_guaranty_intent(question):
                 generated["guarantor_rows"] = []
@@ -2891,75 +2883,9 @@ def query_sop():
                 subanswers[candidate["subanswer_index"]][
                     "unresolved_trigger"
                 ] = trigger
-        # An admitted sub-question may have useful audited propositions or
-        # guarantor rows even when the model's conclusion object was empty or
-        # failed audit. Preserve a substantive applied conclusion instead of
-        # rendering the null state; the fallback is itself telemetry-visible.
-        for index, item in enumerate(subanswers):
-            if not item["sources_available"]:
-                continue
-            # Do not replace a missing fact-applied answer with a recited rule
-            # for the compound deposit/rate issues.
-            if item.get("focused_retrieval"):
-                continue
-            has_supported_conclusion = any(
-                candidate["kind"] == "conclusion"
-                and candidate["subanswer_index"] == index
-                and candidate_admitted(audit_results.get(candidate_index))
-                for candidate_index, candidate in enumerate(validated_candidates)
-            )
-            if has_supported_conclusion:
-                continue
-            supported_props = [
-                candidate
-                for candidate_index, candidate in enumerate(validated_candidates)
-                if candidate["kind"] == "proposition"
-                and candidate["subanswer_index"] == index
-                and candidate_admitted(audit_results.get(candidate_index))
-            ]
-            supported_rows = [
-                candidate["row"]
-                for candidate_index, candidate in enumerate(validated_candidates)
-                if candidate["kind"] == "guarantor_row"
-                and candidate["subanswer_index"] == index
-                and candidate_admitted(audit_results.get(candidate_index))
-            ]
-            fallback = fallback_applied_conclusion(
-                supported_props,
-                supported_rows,
-            )
-            if fallback is not None:
-                fallback_candidate = {
-                    "kind": "conclusion",
-                    "subanswer_index": index,
-                    "text": fallback["text"],
-                    "citations": list(fallback["citations"]),
-                    "numeric_reference": question,
-                    "subquestion": item["question"],
-                    "requested_question": item["requested_question"],
-                    "subquestion_id": item["subquestion_id"],
-                    "policy_issue": item["policy_issue"],
-                    "gate_by_source_id": item["gate_by_source_id"],
-                    "applicable_source_ids": list(item["admitted_source_ids"]),
-                    "arithmetic_valid": True,
-                }
-                fallback_trigger = unresolved_adjacent_trigger(
-                    fallback_candidate, question, source_by_id
-                )
-                if fallback_trigger:
-                    item["unresolved_trigger"] = fallback_trigger
-                else:
-                    checked_fallback = validate_candidate_citations(
-                        [fallback_candidate], source_by_id
-                    )
-                    if checked_fallback:
-                        validated_candidates.extend(checked_fallback)
-                        audit_results[len(validated_candidates) - 1] = {
-                            "entailment_supported": True,
-                            "relevant_to_subquestion": True,
-                            "admitted_for_render": True,
-                            "derived_from_audited_candidates": True,
-                        }
+        # A missing or rejected conclusion stays unresolved. Audited propositions
+        # and rows retain their support, but cannot manufacture an automatically
+        # admitted replacement answer.
         supported_candidates = [
             candidate
             for index, candidate in enumerate(validated_candidates)
@@ -3275,6 +3201,17 @@ def query_sop():
             if not applied_conclusion and not row_candidates:
                 support_note = f"Not addressed by retrieved provisions. {support_note or answer}"
                 answer = support_note
+            stated_facts = item["generated"].get("stated_facts", [])
+            if stated_facts:
+                fact_note = "Supplied facts (quoted from your question): " + "; ".join(
+                    f"“{fact}”" for fact in stated_facts
+                ) + ". These stated facts are not a substitute for operative legal authority."
+                if applied_conclusion:
+                    applied_conclusion["text"] += "\n\n" + fact_note
+                    answer += "\n\n" + fact_note
+                elif not row_candidates:
+                    support_note += " " + fact_note
+                    answer = support_note
             used_ids = {
                 citation["source_id"]
                 for artifact in [applied_conclusion, *propositions, *guarantor_rows]
@@ -3322,6 +3259,7 @@ def query_sop():
                     "guarantor_rows": guarantor_rows,
                     "support_status": support_status,
                     "support_note": support_note,
+                    "stated_facts": item["generated"].get("stated_facts", []),
                     "unresolved": support_status in {"unresolved", "not_established"},
                     "unresolved_reason": unresolved_reason,
                     "searched_terms": item["search_terms"],
@@ -4041,7 +3979,7 @@ def generate_propositions(
     )
     response = client.chat.completions.create(
         model=ANSWER_MODEL,
-        max_tokens=1800,
+        max_tokens=2400,
         temperature=0,
         messages=[
             {
@@ -4065,7 +4003,29 @@ def generate_propositions(
                     "maintain accounts changes the Note rate/spread, rather than "
                     "merely adopting the label default rate. If the loan's fixed/"
                     "variable structure or required consent is unstated, preserve "
-                    "that limitation. A Preference definition alone is not a "
+                     "that limitation. Before declaring any fact missing, check the "
+                     "entire original question: never deny a supplied fixed/variable "
+                     "rate, signed written agreement, account balance, or SBA consent. "
+                     "A stated negative fact (for example no agreement) is not an "
+                     "unknown fact. Distinguish agreement to this particular change "
+                     "from a generic signed loan document. List stated_facts as up to "
+                     "six short EXACT substrings of ORIGINAL QUESTION that establish "
+                     "the material facts for this sub-question, even if no legal "
+                     "conclusion can be supported. Include specified fixed/variable "
+                     "rate and supplied or expressly absent agreement. Do not include "
+                     "the user's legal questions as stated facts. For arithmetic, "
+                     "compute the exact sum and distinguish meeting a threshold from "
+                     "exceeding it. A necessary condition is not sufficient "
+                     "authorization: 'may not X without Y' does not authorize every "
+                     "X when Y exists. Apply other operative prerequisites and "
+                     "prohibitions before concluding permission. A Preference ban "
+                     "does not establish that the facts meet its definition; apply "
+                     "both and preserve consent qualifications. For who-signs "
+                     "questions, quote the execution rule and identify signing "
+                     "capacity, not merely a guaranty threshold. Citation applications "
+                     "must apply a specific stated fact, not copy or shorten the "
+                     "quoted rule. Do not invent, paraphrase, or "
+                     "take those fact quotes from the SOP. A Preference definition alone is not a "
                     "prohibition: cite the prohibiting provision as well for a "
                     "prohibited result and preserve the SBA-consent qualification. "
                     "do not assume a permissive program-specific exception applies. "
@@ -4106,6 +4066,7 @@ def generate_propositions(
                     f"SOURCE-DERIVED POLICY ISSUE:\n{json.dumps(policy_issue or {})}\n\n"
                     f"DISCRETE SUB-QUESTION:\n{subquestion}\n\n"
                     f"MATERIAL FACTS TO CHECK:\n{json.dumps(material_facts)}\n\n"
+                    f"INPUT ARITHMETIC, NOT LEGAL AUTHORITY:\n{json.dumps(trust_ownership_arithmetic(original_question))}\n\n"
                     f"VERBATIM QUOTE OPTIONS (use the explicit source_id and quote_id):\n"
                     f"{json.dumps([{'source_id': source_id, 'options': [{'quote_id': index, 'quote': quote} for index, quote in enumerate(options)]} for source_id, options in quote_menu.items()])}\n\n"
                     f"SOP CONTEXT:\n{context}"
@@ -4124,12 +4085,14 @@ def generate_propositions(
                         "propositions": {"$ref": "#/$defs/claim_list"},
                         "other_issues": {"$ref": "#/$defs/claim_list"},
                         "guarantor_rows": {"$ref": "#/$defs/guarantor_row_list"},
+                         "stated_facts": {"type": "array", "items": {"type": "string"}},
                     },
                     "required": [
                         "applied_conclusion",
                         "propositions",
                         "other_issues",
                         "guarantor_rows",
+                         "stated_facts",
                     ],
                     "additionalProperties": False,
                     "$defs": {
@@ -4242,6 +4205,7 @@ def generate_propositions(
         "propositions": result.get("propositions", []),
         "other_issues": result.get("other_issues", []),
         "guarantor_rows": result.get("guarantor_rows", []),
+         "stated_facts": validated_stated_facts(original_question, result.get("stated_facts")),
     }
     app.logger.info(
         "SOP conclusion synthesizer output: %s",
@@ -4289,11 +4253,6 @@ def validate_candidate_citations(
                 )
                 continue
             application = citation.get("application")
-            if candidate.get("kind") == "conclusion" and not isinstance(application, str):
-                # Deterministic conclusions use already fact-specific prose;
-                # reduce their exact source excerpt to one operative sentence.
-                application = candidate["text"]
-                quote = sentences(quote)[0] if sentences(quote) else quote
             error = (
                 applied_evidence_error(quote, application or "", source.chunk_text)
                 if candidate.get("kind") == "conclusion"
@@ -4582,7 +4541,7 @@ def audit_propositions(
                 {
                     "source_id": source.source_id,
                     "section_ref": source.section_ref,
-                    "source_context": source.chunk_text[:1800],
+                    "source_context": citation["quote"],
                     "quote": citation["quote"],
                 }
             )
@@ -4647,7 +4606,7 @@ def audit_propositions(
     try:
         response = client.chat.completions.create(
             model=ANSWER_MODEL,
-            max_tokens=1400,
+            max_tokens=min(6000, max(1400, len(audit_items) * 100)),
             temperature=0,
             messages=[
                 {
@@ -4679,13 +4638,37 @@ def audit_propositions(
                         "exception, amount, comparison, and computed result. Each "
                         "source-specific applied explanation must follow from that "
                         "source's quote plus stated facts, not another program's "
-                        "rule or an uncited assumption. Items marked "
+                         "rule. Return supports=false if the prose contradicts an "
+                         "explicit fact in the original question or describes that "
+                         "fact as missing. A negative stated fact is not unknown. "
+                         "Do not mistake supplied borrower agreement for automatic "
+                         "legal permission. Never allow "
+                        "an uncited assumption. Items marked "
+                        "citation_application must apply a relevant user fact to "
+                        "their own quote; reciting the rule is insufficient. A "
+                        "necessary condition is not sufficient permission: 'may "
+                        "not X without Y' does not authorize all X when Y exists. "
+                        "Reject permission claims that ignore other prerequisites "
+                        "or prohibitions, including required notice. A prohibition "
+                        "of a defined activity alone does not establish that the "
+                        "facts meet its definition. Verify arithmetic exactly: "
+                        "meeting a threshold is different from exceeding it. A "
+                        "guaranty-ownership threshold alone does not establish "
+                        "who executes a document or in what capacity. Items marked "
+                        "conclusion have ONLY their selected operative quotes as "
+                        "authority for EACH material claim. A rule present elsewhere "
+                        "in the chunk or a context-only neighbor does not support "
+                        "an uncited conclusion claim. If a distinct actor's duty "
+                        "is asserted, it needs its own operative quote. Items marked "
                         "citation_application have ONLY the selected quote as "
                         "authority: no surrounding source text or another citation "
                         "can supply missing operative language. Reject "
                         "claims that add unstated content. Do not repair or rewrite "
-                        "propositions. If the policy issue is absent or the item "
-                        "answers an adjacent issue, return relevant=false. Missing or "
+                        "propositions. If the policy issue is absent, return "
+                        "relevant=false EXCEPT citation_application relevance is "
+                        "judged directly against the requested sub-question and "
+                        "its own operative quote. If the item answers an adjacent "
+                        "issue, return relevant=false. Missing or "
                         "ambiguous checks must not be treated as admitted."
                     ),
                 },
@@ -4752,7 +4735,9 @@ def audit_propositions(
                     "citation_application_failed": True,
                 }
         for index, candidate in enumerate(candidates):
-            scope_error = conclusion_scope_error(candidate)
+            scope_error = conclusion_scope_error(candidate) or percentage_comparison_error(
+                original_question, candidate.get("text", "")
+            )
             if scope_error:
                 checks[index] = {
                     "entailment_supported": False,

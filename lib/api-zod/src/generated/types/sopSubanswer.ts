@@ -23,6 +23,7 @@ export interface SopSubanswer {
   support_status: SopSubanswerSupportStatus;
   /** @nullable */
   support_note: string | null;
+  stated_facts?: string[];
   searched_terms: string[];
   rejected_citations: SopSource[];
   propositions: SopProposition[];

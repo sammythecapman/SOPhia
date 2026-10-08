@@ -5,6 +5,9 @@ import argparse
 import json
 import re
 import sys
+import hashlib
+import time
+from datetime import datetime, timezone
 from pathlib import Path
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
@@ -85,52 +88,26 @@ def evaluate(case: dict, result: dict) -> dict[str, bool]:
     checks["Preference SBA query expansion"] = all(
         term.casefold() in terms.casefold() for term in case.get("required_expansions", [])
     )
-    if case.get("expected_supplied_facts"):
-        preference_answers = matches[0] if matches else []
-        has_applied_answer = any(
-            item.get("applied_conclusion") for item in preference_answers
+    for expectation in case.get("fact_expectations", []):
+        found = [
+            item for item in subanswers
+            if re.search(expectation["issue_pattern"], item.get("requested_question") or "", re.I)
+        ]
+        # Inspect the actual visible answer, not the fixture, debug telemetry,
+        # source chunk, or a rejected citation's unused application.
+        text = " ".join(
+            " ".join(str(part or "") for part in [
+                item.get("answer"), item.get("support_note"),
+                (item.get("applied_conclusion") or {}).get("text"),
+                *[c.get("application") for c in
+                  (item.get("applied_conclusion") or {}).get("citations", [])],
+            ]) for item in found
         )
-        answer_parts = [result.get("summary") or ""]
-        for item in preference_answers:
-            conclusion = item.get("applied_conclusion") or {}
-            answer_parts.extend([
-                item.get("answer") or "",
-                item.get("support_note") or "",
-                conclusion.get("text") or "",
-                *[
-                    citation.get("application") or ""
-                    for citation in conclusion.get("citations", [])
-                ],
-                *[
-                    citation.get("application") or ""
-                    for citation in item.get("rejected_citations", [])
-                ],
-            ])
-        answer_text = " ".join(str(part) for part in answer_parts)
-        question_facts = case.get(
-            "expected_question_facts", case["expected_supplied_facts"]
-        )
-        for fact_index, fact in enumerate(case["expected_supplied_facts"]):
-            if has_applied_answer:
-                checks[f"answer preserves supplied fact: {fact}"] = (
-                    fact.casefold() in answer_text.casefold()
-                )
-            elif explicit_gap:
-                question_fact = (
-                    question_facts[fact_index]
-                    if fact_index < len(question_facts) else fact
-                )
-                checks[f"case supplies contrast fact: {fact}"] = (
-                    question_fact.casefold() in case["question"].casefold()
-                )
-        for pattern in case.get("not_missing_patterns", []):
-            checks[f"supplied facts not called missing: {pattern}"] = not bool(
-                re.search(pattern, answer_text, re.I)
-            )
-        outcome_pattern = case.get("forbidden_preference_outcome_pattern")
-        if outcome_pattern:
-            checks["avoids forcing a Preference outcome"] = not bool(
-                re.search(outcome_pattern, answer_text, re.I)
+        for pattern in expectation.get("present_patterns", []):
+            checks[f"visible fact: {pattern}"] = bool(found) and bool(re.search(pattern, text, re.I))
+        for pattern in expectation.get("absent_patterns", []):
+            checks[f"no factual contradiction: {pattern}"] = bool(found) and not bool(
+                re.search(pattern, text, re.I)
             )
     if case.get("substance_pattern"):
         rate_answers = matches[-1] if matches else []
@@ -145,7 +122,30 @@ def evaluate(case: dict, result: dict) -> dict[str, bool]:
             )
             for item in rate_answers
         )
+    for forbidden in case.get("forbidden_claims", []):
+        visible_answers = " ".join(
+            item.get("answer") or "" for item in subanswers
+        )
+        checks[f"no unsupported claim: {forbidden['label']}"] = not bool(
+            re.search(forbidden["pattern"], visible_answers, re.I | re.S)
+        )
     return checks
+
+
+def saved_responses(saved: dict, cases: list[dict]) -> dict:
+    if "cases" in saved:
+        expected_questions = {case["id"]: case["question"] for case in cases}
+        for captured in saved["cases"]:
+            if captured["id"] in expected_questions and (
+                captured.get("question") != expected_questions[captured["id"]]
+            ):
+                raise ValueError(f"Saved question is missing or changed for {captured['id']}. Capture a new answer.")
+        return {case["id"]: case["response"] for case in saved["cases"] if case.get("response")}
+    if "subanswers" in saved:
+        if len(cases) != 1:
+            raise ValueError("A single saved response cannot be reused for multiple fixtures.")
+        return {cases[0]["id"]: saved}
+    return saved
 
 
 def main() -> int:
@@ -156,14 +156,45 @@ def main() -> int:
     parser.add_argument("--output", type=Path, default=ROOT / "outputs/sophia-issue-eval-results.json")
     args = parser.parse_args()
     cases = json.loads(args.cases.read_text())["cases"]
-    saved = json.loads(args.response.read_text()) if args.response else None
+    saved_file = json.loads(args.response.read_text()) if args.response else None
+    saved = saved_responses(saved_file, cases) if saved_file is not None else None
     reports = []
+    def health():
+        with urlopen(args.base_url.rstrip("/") + "/api/healthz", timeout=15) as response:
+            return json.load(response)
+    initial_health = saved_file.get("health_before") if saved_file is not None else health()
+    report = {
+        "format": "sophia-issue-evals-v2",
+        "recorded_at_utc": datetime.now(timezone.utc).isoformat(),
+        "mode": "rescore" if saved is not None else "live-development",
+        "base_url": args.base_url,
+        "fixture_sha256": hashlib.sha256(args.cases.read_bytes()).hexdigest(),
+        "evaluator_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
+        "health_before": initial_health,
+        "planned_case_count": len(cases),
+        "completed": False,
+        "legal_accuracy_note": "Automated checks are not a hand-reviewed legal accuracy pass.",
+        "source_capture": ({
+            "path": str(args.response),
+            "recorded_at_utc": saved_file.get("recorded_at_utc"),
+            "mode": saved_file.get("mode"),
+            "base_url": saved_file.get("base_url"),
+            "fixture_sha256": saved_file.get("fixture_sha256"),
+            "evaluator_sha256": saved_file.get("evaluator_sha256"),
+        } if saved_file is not None else None),
+        "cases": reports,
+    }
+    def save():
+        args.output.parent.mkdir(parents=True, exist_ok=True)
+        args.output.write_text(json.dumps(report, indent=2) + "\n")
+    save()  # Replace any stale report before sending requests.
     for case in cases:
         print(f"\n{case['id']}", flush=True)
         error = None
+        started = time.monotonic()
         try:
             if saved is not None:
-                result = saved if "subanswers" in saved else saved[case["id"]]
+                result = saved[case["id"]]
             else:
                 req = Request(
                     args.base_url.rstrip("/") + "/api/sop/query",
@@ -173,7 +204,7 @@ def main() -> int:
                 with urlopen(req, timeout=300) as response:
                     result = json.load(response)
             checks = evaluate(case, result)
-        except (HTTPError, URLError, TimeoutError, ValueError, KeyError) as exc:
+        except (HTTPError, URLError, TimeoutError, ValueError, KeyError, TypeError) as exc:
             error = str(exc)
             result = {}
             checks = {"request and response": False}
@@ -181,10 +212,30 @@ def main() -> int:
             print(f"{'PASS' if passed else 'FAIL'}  {name}", flush=True)
         if error:
             print(f"ERROR {error}", flush=True)
-        reports.append({"id": case["id"], "checks": checks, "error": error, "response": result})
-    args.output.parent.mkdir(parents=True, exist_ok=True)
-    args.output.write_text(json.dumps({"cases": reports}, indent=2) + "\n")
-    return 0 if all(all(report["checks"].values()) for report in reports) else 1
+        reports.append({
+            "id": case["id"], "question": case["question"],
+            "recorded_at_utc": datetime.now(timezone.utc).isoformat(),
+            "elapsed_seconds": round(time.monotonic() - started, 2),
+            "checks": checks, "error": error, "response": result,
+            "response_sha256": hashlib.sha256(json.dumps(result, sort_keys=True).encode()).hexdigest(),
+        })
+        save()
+    report["health_after"] = saved_file.get("health_after") if saved_file is not None else health()
+    report["completed"] = all(not item["error"] and item["response"] for item in reports)
+    report["build_unchanged"] = (
+        bool(initial_health and initial_health.get("build_sha"))
+        and initial_health.get("build_sha") == (report["health_after"] or {}).get("build_sha")
+    )
+    save()
+    print(
+        f"\nSaved {len(reports)}/{len(cases)} responses; "
+        f"build unchanged={report['build_unchanged']}. Legal review is separate.",
+        flush=True,
+    )
+    return 0 if (
+        report["completed"] and report["build_unchanged"]
+        and all(all(item["checks"].values()) for item in reports)
+    ) else 1
 
 
 if __name__ == "__main__":

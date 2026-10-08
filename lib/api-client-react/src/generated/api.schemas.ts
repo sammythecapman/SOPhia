@@ -5,6 +5,13 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+export type HealthStatusBuildShaKind = typeof HealthStatusBuildShaKind[keyof typeof HealthStatusBuildShaKind];
+
+
+export const HealthStatusBuildShaKind = {
+  'source-content-sha256': 'source-content-sha256',
+} as const;
+
 export interface HealthStatus {
   status: string;
   sop_version: string;
@@ -14,6 +21,11 @@ export interface HealthStatus {
   source_sha256: string;
   /** @minimum 1 */
   chunk_count: number;
+  /** @pattern ^[a-f0-9]{64}$ */
+  build_sha: string;
+  build_sha_kind: HealthStatusBuildShaKind;
+  /** @nullable */
+  git_commit_sha: string | null;
 }
 
 export interface SopQuestion {
@@ -113,6 +125,7 @@ export interface SopSubanswer {
   support_status: SopSubanswerSupportStatus;
   /** @nullable */
   support_note: string | null;
+  stated_facts?: string[];
   searched_terms: string[];
   rejected_citations: SopSource[];
   propositions: SopProposition[];

@@ -11,6 +11,7 @@ const config = {
   target: "https://sop-hia.replit.app",
   sha256: "expected-hash",
   chunkCount: 395,
+  buildSha: "expected-build-sha",
   cases: [
     {id: "trust-guaranty", question: "Trust question"},
     {id: "seller-note", question: "Seller question"}
@@ -21,6 +22,7 @@ async function capture(overrides = {}) {
   let savedBlob;
   let downloads = 0;
   const calls = [];
+  let healthReads = 0;
   const window = {};
   class BrowserURL extends URL {
     static createObjectURL(blob) { savedBlob = blob; return "blob:test"; }
@@ -45,9 +47,12 @@ async function capture(overrides = {}) {
       calls.push({url: String(url), options});
       assert.equal(url.origin, config.target);
       if (url.pathname === "/api/healthz") {
+        healthReads += 1;
         return new Response(JSON.stringify({
           status: "ok", source_sha256: overrides.hash || config.sha256,
-          chunk_count: 395
+          chunk_count: 395,
+          build_sha: healthReads > 1 && overrides.finalBuildSha
+            ? overrides.finalBuildSha : overrides.buildSha || config.buildSha
         }));
       }
       if (url.pathname === "/api/auth/user") {
@@ -94,6 +99,19 @@ test("signed-out session stops before any query", async () => {
   assert.equal(result.report.authenticated_user_confirmed, false);
   assert.equal(result.calls.length, 2);
   assert.equal(result.report.completed, false);
+});
+
+test("wrong build stops before any query", async () => {
+  const result = await capture({buildSha: "old-build"});
+  assert.match(result.report.error, /Build SHA gate failed/);
+  assert.equal(result.calls.length, 1);
+  assert.ok(result.report.cases.every(item => item.status === "NOT_RUN"));
+});
+
+test("a build change during capture cannot be marked complete", async () => {
+  const result = await capture({finalBuildSha: "another-build"});
+  assert.equal(result.report.completed, false);
+  assert.match(result.report.error, /Build or corpus changed during capture/);
 });
 
 test("unexpected unsigned access stops authenticated queries", async () => {

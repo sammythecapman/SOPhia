@@ -20,3 +20,9 @@ An explicit evidence gap and a missing fact are different states. Preserve state
 **Why:** A live contrast question supplied an exact account balance and SBA consent, but its citations did not pass the issue-specific application audit. The answer needed to remain a gap without treating those facts as absent or manufacturing an outcome.
 
 **How to apply:** Evals should separately check known-fact preservation, false-missing language, and whether a conclusion is source-supported. Permit a properly worded evidence gap when application remains unestablished.
+
+Do not replace a rejected legal conclusion with an automatically admitted rule recital. A prohibition needs evidence that the defined activity occurred; satisfying one necessary condition does not prove a proposed action is authorized. Verify arithmetic comparisons against the supplied facts, and require an operative quote for every distinct material claim and signer capacity.
+
+**Why:** Live counterexamples exposed a covenant template denying expressly supplied written agreement, consent being treated as sufficient authorization, a rule against Preferences being treated as proof of the Preference trigger, and equality with a guaranty threshold being described as exceeding it. Unit-test totals hid these answer defects.
+
+**How to apply:** Prefer a clearly marked unresolved issue to a confident but unsupported answer. Review actual responses across changed fact patterns, including saved questions and visible claims; do not count green structural checks or an uncited source-chunk paragraph as a legal-accuracy pass. Avoid adding more hard-coded answer branches to paper over failed audit outcomes.

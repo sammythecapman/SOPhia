@@ -8,6 +8,7 @@
 
 export * from './apiError';
 export * from './healthStatus';
+export * from './healthStatusBuildShaKind';
 export * from './sopGuarantorRow';
 export * from './sopGuarantorRowStatus';
 export * from './sopProposition';

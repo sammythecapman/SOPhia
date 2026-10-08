@@ -10,10 +10,12 @@ from applicability import applicability_check, classify_question, classify_text
 from sophia_issues import (
     applied_evidence_error, preserve_compound_issues, synthesize_bottom_line,
     quote_options, resolve_applied_quotes,
-    grounded_covenant_conclusion, conclusion_scope_error,
+    validated_stated_facts, conclusion_scope_error, trust_ownership_arithmetic,
+    percentage_comparison_error,
     expanded_search_terms, preference_authority_clause,
 )
 from run_sophia_evals import evaluate
+from applicability import classify_question
 
 CASE = json.loads((ROOT / "tests/fixtures/sophia_issue_evals.json").read_text())["cases"][0]
 BALANCE_CONSENT_CASE = next(
@@ -74,177 +76,43 @@ class SophiaIssueTests(unittest.TestCase):
         self.assertEqual(conclusion["citations"][0]["quote"], "Exact source one.")
         self.assertEqual(conclusion["citations"][1]["quote"], "")
 
-    def test_grounded_rate_application_requires_both_real_operative_rules(self):
-        from types import SimpleNamespace
-        source = SimpleNamespace(source_id=3, chunk_text=(
-            "The spread above the base rate as identified in the Note may not be "
-            "changed during the life of the loan without the written agreement of "
-            "the Borrower.\nDefault interest rates are not permitted."
-        ))
-        issue = preserve_compound_issues(CASE["question"], [])[1]["question"]
-        self.assertIsNone(grounded_covenant_conclusion(CASE["question"], issue, []))
-        conclusion = grounded_covenant_conclusion(CASE["question"], issue, [source])
-        self.assertIsNotNone(conclusion)
-        self.assertIn("1.00%", conclusion["text"])
-        self.assertIn("facts do not establish", conclusion["text"])
-        for citation in conclusion["citations"]:
-            self.assertIsNone(applied_evidence_error(
-                citation["quote"], citation["application"], source.chunk_text
-            ))
-
-    def test_grounded_preference_application_requires_definition_and_prohibition(self):
-        from types import SimpleNamespace
-
-        definition = SimpleNamespace(
-            source_id=3,
-            chunk_text=(
-                "Preference: (13 CFR § 120.10 7(a) and 504) Any arrangement giving "
-                "a Lender or a CDC a preferred position compared to SBA relating to "
-                "the making, servicing, or liquidation of a business loan with "
-                "respect to such things as repayment, collateral, guarantees, "
-                "control, maintenance of a compensating balance, purchase of a "
-                "Certificate of deposit or acceptance of a separate or companion "
-                "loan, without SBA’s consent."
-            ),
-        )
-        authority_quote = (
-            "A Lender may not take any action in connection with an SBA-guaranteed "
-            "loan that establishes a preference in favor of the Lender "
-            "(13 CFR § 120.411)."
-        )
-        authority = SimpleNamespace(
-            source_id=4,
-            chunk_text=(
-                authority_quote
-                + "\nFor changes of ownership, see Appendix 15."
-            ),
-        )
-        issue = preserve_compound_issues(CASE["question"], [])[0]["question"]
-
-        self.assertIsNone(preference_authority_clause(definition.chunk_text))
+    def test_stated_facts_must_be_exact_user_quotes_not_inferred_rules(self):
+        question = "This is a variable-rate loan. The Borrower signed a written agreement."
+        facts = ["variable-rate loan", "The Borrower signed a written agreement",
+                 "The loan is permitted", "variable-rate loan", None]
+        result = validated_stated_facts(question, facts)
+        self.assertIn("This is a variable-rate loan.", result)
+        self.assertIn("variable-rate loan", result)
+        self.assertNotIn("The loan is permitted", result)
+        self.assertEqual(len(result), len(set(result)))
         self.assertEqual(
-            preference_authority_clause(authority.chunk_text), authority_quote
+            validated_stated_facts(question, "not a list"),
+            ["This is a variable-rate loan.", "The Borrower signed a written agreement."],
         )
-        self.assertIsNone(
-            grounded_covenant_conclusion(CASE["question"], issue, [definition])
-        )
-        conclusion = grounded_covenant_conclusion(
-            CASE["question"], issue, [definition, authority]
-        )
+        contrast = BALANCE_CONSENT_CASE["question"]
+        self.assertIn("$125,000", " ".join(validated_stated_facts(contrast, [])))
 
-        self.assertIsNotNone(conclusion)
-        self.assertIn("required account balance", conclusion["text"])
-        self.assertIn("SBA consent", conclusion["text"])
-        self.assertIn(
-            "The facts do not state", conclusion["citations"][0]["application"]
-        )
+    def test_account_balance_is_not_a_loan_amount(self):
+        tags = classify_question(BALANCE_CONSENT_CASE["question"])
+        self.assertEqual(tags["product_lines"], ["standard_7a"])
+        self.assertEqual(tags["loan_size_bands"], [])
         self.assertEqual(
-            [citation["quote"] for citation in conclusion["citations"]],
-            [definition.chunk_text, authority_quote],
-        )
-        for citation, source in zip(
-            conclusion["citations"], [definition, authority]
-        ):
-            self.assertIsNone(
-                applied_evidence_error(
-                    citation["quote"], citation["application"], source.chunk_text
-                )
-            )
-
-    def test_grounded_preference_application_preserves_supplied_balance_and_consent(self):
-        from types import SimpleNamespace
-
-        definition = SimpleNamespace(
-            source_id=3,
-            chunk_text=(
-                "Preference: (13 CFR § 120.10 7(a) and 504) Any arrangement giving "
-                "a Lender or a CDC a preferred position compared to SBA relating to "
-                "the making, servicing, or liquidation of a business loan with "
-                "respect to such things as repayment, collateral, guarantees, "
-                "control, maintenance of a compensating balance, purchase of a "
-                "Certificate of deposit or acceptance of a separate or companion "
-                "loan, without SBA’s consent."
-            ),
-        )
-        authority_quote = (
-            "A Lender may not take any action in connection with an SBA-guaranteed "
-            "loan that establishes a preference in favor of the Lender "
-            "(13 CFR § 120.411)."
-        )
-        authority = SimpleNamespace(source_id=4, chunk_text=authority_quote)
-        question = BALANCE_CONSENT_CASE["question"]
-        issue = preserve_compound_issues(question, [])[0]["question"]
-
-        conclusion = grounded_covenant_conclusion(
-            question, issue, [definition, authority]
+            classify_question("An SBA loan of $125,000 is requested.")["loan_size_bands"],
+            ["up_to_350k"],
         )
 
-        self.assertIsNotNone(conclusion)
-        expected_facts = BALANCE_CONSENT_CASE["expected_supplied_facts"]
-        self.assertIn("$125,000", question)
-        self.assertIn("SBA has granted written consent", question)
-        for fact in expected_facts:
-            self.assertIn(fact.casefold(), conclusion["text"].casefold())
-        self.assertIn("$125,000", conclusion["text"])
-        self.assertIn("SBA written consent", conclusion["text"])
-        self.assertIn("supplied, not missing", conclusion["text"])
-        self.assertNotIn("The facts do not state a required account balance", conclusion["text"])
-        self.assertNotIn("The facts do not state whether SBA consent", conclusion["text"])
-        self.assertNotIn("is a prohibited Preference", conclusion["text"])
-        self.assertNotIn("is permitted", conclusion["text"])
-        for citation, source in zip(
-            conclusion["citations"], [definition, authority]
-        ):
-            self.assertIsNone(applied_evidence_error(
-                citation["quote"], citation["application"], source.chunk_text
-            ))
-        self.assertIn("$125,000", conclusion["citations"][0]["application"])
-        self.assertIn("SBA written consent", conclusion["citations"][0]["application"])
-
-        gap_note = "Not addressed by retrieved provisions for the separate rate issue."
-        eval_response = {
-            "summary": conclusion["text"] + " Interest-rate rules: " + gap_note,
-            "subanswers": [
-                {
-                    "requested_question": "Preference / compensating balance",
-                    "applied_conclusion": {
-                        **conclusion,
-                        "citations": [
-                            {
-                                **citation,
-                                "verified": True,
-                                "quote_located": True,
-                                "supports_conclusion": True,
-                                "source_chunk": source.chunk_text,
-                            }
-                            for citation, source in zip(
-                                conclusion["citations"], [definition, authority]
-                            )
-                        ],
-                    },
-                    "searched_terms": BALANCE_CONSENT_CASE["required_expansions"],
-                    "rejected_citations": [
-                        {"rejection_reason": "Non-applicable passage.", "supports_conclusion": False}
-                    ],
-                },
-                {
-                    "requested_question": "Interest-rate rules",
-                    "support_note": gap_note,
-                    "searched_terms": [],
-                },
-            ],
-            "sources": [
-                {"program_scope": ["general"], "supports_conclusion": True}
-            ],
-            "rejected_citations": [
-                {"rejection_reason": "Out of scope.", "supports_conclusion": False}
-            ],
-        }
-        checks = evaluate(BALANCE_CONSENT_CASE, eval_response)
-        self.assertTrue(checks["answer preserves supplied fact: $125,000"])
-        self.assertTrue(checks["answer preserves supplied fact: SBA written consent"])
-        self.assertTrue(checks["avoids forcing a Preference outcome"])
-        self.assertTrue(all(checks.values()), checks)
+    def test_real_trust_answer_cannot_claim_equal_sum_exceeds_threshold(self):
+        captured = json.loads((ROOT / "outputs/sophia-trust-first-pass.json").read_text())
+        question = captured["question"]
+        answer = captured["response"]["subanswers"][0]["applied_conclusion"]["text"]
+        self.assertEqual(trust_ownership_arithmetic(question)["sum_percent"], "20")
+        self.assertIsNotNone(percentage_comparison_error(question, answer))
+        self.assertIsNone(percentage_comparison_error(question.replace("8%", "9%"), answer))
+        stated = validated_stated_facts(
+            question, ["the trusts' ownership percentages aggregate for guaranty purposes"]
+        )
+        self.assertIn("A 7(a) applicant is owned by two revocable trusts, one at 12% and one at 8%.", stated)
+        self.assertNotIn("the trusts' ownership percentages aggregate for guaranty purposes", stated)
 
     def test_preference_search_expands_to_the_standalone_prohibition(self):
         terms = " ".join(expanded_search_terms(CASE["question"]))

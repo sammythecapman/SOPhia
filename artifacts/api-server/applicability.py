@@ -344,9 +344,18 @@ def classify_question(text: str) -> dict[str, list[str]]:
     tags = classify_text(text)
     lower = text.casefold()
     products = tags["product_lines"]
-    amount_match = re.search(
+    amount_match = None
+    for candidate in re.finditer(
         r"\$\s*([\d,]+(?:\.\d+)?)\s*(mm|m|million|k|thousand)?", lower
-    )
+    ):
+        before = lower[max(0, candidate.start() - 70):candidate.start()]
+        after = lower[candidate.end():candidate.end() + 45]
+        if (
+            re.search(r"\bloan(?:\s+amount)?\s*(?:of|is|for|:|=)?\s*$", before)
+            or re.match(r"\s*(?:sba\s+)?(?:standard\s+)?(?:7\s*\(a\)\s+)?loan\b", after)
+        ):
+            amount_match = candidate
+            break
     amount = None
     if amount_match:
         number = float(amount_match.group(1).replace(",", ""))
@@ -379,7 +388,7 @@ def classify_question(text: str) -> dict[str, list[str]]:
         products[:] = ["504"]
     elif amount is not None and amount <= 350_000 and (
         "7(a)" in lower or "7a" in lower or "sba" in lower
-    ):
+    ) and "standard_7a" not in products:
         products[:] = ["7a_small"]
     else:
         products[:] = ["standard_7a"]

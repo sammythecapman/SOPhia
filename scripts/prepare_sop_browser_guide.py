@@ -11,13 +11,17 @@ ROOT = Path(__file__).resolve().parents[1]
 SHA256 = "0fb0c4692cf529380827746e5fe812e42ea82b6f6fdf97a71d1093677d963183"
 
 
-def build_guide(target: str) -> str:
+def build_guide(target: str, build_sha: str) -> str:
     cases = json.loads((ROOT / "tests/sop_regression.json").read_text())
+    cases.extend(json.loads(
+        (ROOT / "tests/fixtures/sophia_issue_evals.json").read_text()
+    )["cases"])
     cases.sort(key=lambda case: case["id"] != "trust-guaranty")
     config = {
         "target": target.rstrip("/"),
         "sha256": SHA256,
         "chunkCount": 395,
+        "buildSha": build_sha,
         "cases": [{"id": case["id"], "question": case["question"]} for case in cases],
     }
     template = (ROOT / "scripts/sop_browser_runner.js").read_text()
@@ -39,9 +43,14 @@ li{{margin:10px 0}} @media(max-width:600px){{main{{margin:12px;padding:20px}}}}
 </style></head><body><main>
 <h1>SOPhia production verification</h1>
 <p>Use your existing signed-in browser session to collect {len(cases)} regression responses.
-The two-trust aggregation question runs first. No new publish is needed.</p>
+The two-trust aggregation question runs first, followed by the regression and fact-changing counterexamples.
+Publish the updated build before running this guide.
+This guide is <strong>not a completed production verification</strong>.</p>
+<p>Required source-content build SHA: <code>{html.escape(build_sha)}</code>.
+The health endpoint's <code>git_commit_sha</code>, when available, is separate;
+the content SHA identifies shipped code even if the published bundle has no Git metadata.</p>
 <div class="notice"><strong>What this script does:</strong> checks the expected corpus
-hash and 395 chunks, verifies authorized sign-in and unsigned 401 rejection, then
+hash, 395 chunks, and exact build SHA before and after the run, verifies authorized sign-in and unsigned 401 rejection, then
 sends the saved regression questions one at a time. These queries use the live
 answer service and its normal query usage. It does not read or export cookies,
 passwords, account details, or request headers. It does not change the corpus or configuration.
@@ -90,9 +99,10 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--target", required=True)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--expected-build-sha", required=True)
     args = parser.parse_args()
     args.output.parent.mkdir(parents=True, exist_ok=True)
-    args.output.write_text(build_guide(args.target))
+    args.output.write_text(build_guide(args.target, args.expected_build_sha))
     print(f"Guide written to {args.output}")
 
 

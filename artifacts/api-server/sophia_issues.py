@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from decimal import Decimal
 from typing import Any
 
 PREFERENCE_SEARCHES = [
@@ -16,7 +17,7 @@ RATE_SEARCHES = [
     "increase interest rate failure loan agreement conditions default interest rate",
 ]
 DEPOSIT_RE = re.compile(r"deposit accounts?|compensating balances?", re.I)
-RATE_RE = re.compile(r"interest rate|rate (?:increase|step[- ]?up)|default rate", re.I)
+RATE_RE = re.compile(r"interest rate|note[- ](?:rate|spread)|rate (?:increase|step[- ]?up)|default rate", re.I)
 PREFERENCE_RE = re.compile(r"\bpreference\b|compensating balances?", re.I)
 PREFERENCE_AUTHORITY_RE = re.compile(
     r"\bmay not take any action\b.*\bestablish(?:es)? a preference in favor of the lender\b",
@@ -98,10 +99,16 @@ def applied_evidence_error(quote: str, application: str, source: str) -> str | N
         return "Applied quote exceeds one sentence; support was withheld."
     if not 1 <= len(sentences(application)) <= 3:
         return "Applied explanation must contain one to three sentences."
+    quote_words = re.sub(r"\W+", " ", quote.casefold()).strip()
+    application_words = re.sub(r"\W+", " ", application.casefold()).strip()
+    if len(application_words) >= 30 and (
+        application_words in quote_words or quote_words in application_words
+    ):
+        return "Applied explanation recites the operative quote instead of applying facts."
     return None
 
 
-def quote_options(source: str, issue: str, limit: int = 6) -> list[str]:
+def quote_options(source: str, issue: str, limit: int = 12) -> list[str]:
     """Offer exact single-sentence spans, never repaired or paraphrased text."""
     anchors = set(re.findall(r"[a-z]{4,}", issue.casefold())) - {
         "that", "this", "with", "from", "loan", "lender", "borrower",
@@ -111,9 +118,13 @@ def quote_options(source: str, issue: str, limit: int = 6) -> list[str]:
         sentence for line in source.splitlines() for sentence in sentences(line)
         if len(sentence) >= 20 and sentence in source
     ))
+    execution_requested = bool(re.search(r"\bsign(?:s|ing|er)?\b|\bexecut(?:e|ion)\b", issue, re.I))
     return sorted(
         options,
-        key=lambda sentence: len(anchors.intersection(re.findall(r"[a-z]{4,}", sentence.casefold()))),
+        key=lambda sentence: (
+            len(anchors.intersection(re.findall(r"[a-z]{4,}", sentence.casefold())))
+            + (10 if execution_requested and re.search(r"\bexecut(?:e|es|ed|ion)\b", sentence, re.I) else 0)
+        ),
         reverse=True,
     )[:limit]
 
@@ -131,141 +142,52 @@ def resolve_applied_quotes(conclusion: dict[str, Any], menu: dict[int, list[str]
         )
 
 
-def grounded_covenant_conclusion(
-    question: str, issue: str, sources: list[Any]
-) -> dict[str, Any] | None:
-    """Apply the independently retrieved operative rules with missing facts explicit.
+def validated_stated_facts(question: str, facts: Any) -> list[str]:
+    """Preserve only exact user-supplied spans, never inferred legal conclusions."""
+    if not isinstance(facts, list):
+        facts = []
+    declarative_spans = [
+        span.strip() for span in re.split(r"(?<=[.!?])\s+|[;\n]+", question)
+        if "?" not in span and 5 <= len(span.strip()) <= 240
+    ]
+    return list(dict.fromkeys(
+        fact.strip() for fact in [*declarative_spans, *facts]
+        if isinstance(fact, str) and 5 <= len(fact.strip()) <= 240
+        and any(fact.strip() in span for span in declarative_spans)
+    ))[:6]
 
-    Used only for the compound deposit/rate fact pattern. No legal rule is supplied
-    by this template: all required operative spans must exist in admitted sources.
-    """
-    if not (DEPOSIT_RE.search(question) and RATE_RE.search(question)):
+
+def trust_ownership_arithmetic(question: str) -> dict[str, Any] | None:
+    """Arithmetic for an explicitly described two-trust pair, not a guaranty rule."""
+    if not re.search(r"owned by (?:two|2)\s+(?:(?:ir)?revocable\s+)?trusts", question, re.I):
         return None
-
-    def locate(pattern: str) -> tuple[Any, str] | None:
-        for source in sources:
-            for line in source.chunk_text.splitlines():
-                for quote in sentences(line):
-                    if re.search(pattern, quote, re.I) and quote in source.chunk_text:
-                        return source, quote
+    if not re.search(r"aggregat", question, re.I):
         return None
+    values = re.findall(r"(\d+(?:\.\d+)?)\s*%", question)
+    if len(values) != 2:
+        return None  # Do not sum ambiguously attributed rates, owners, or other percentages.
+    return {
+        "percentages": values,
+        "sum_percent": str(sum(Decimal(value) for value in values)),
+        "note": "Arithmetic only. The cited SOP must establish whether legal aggregation applies.",
+    }
 
-    def citation(found: tuple[Any, str], application: str) -> dict[str, Any]:
-        return {"source_id": found[0].source_id, "quote": found[1], "application": application}
 
-    if re.search(r"\bPreference\b", issue, re.I):
-        definition = locate(r"Preference:.*preferred position.*compensating balance")
-        prohibition = locate(r"may not.*establishes? a preference")
-        if not definition or not prohibition:
-            return None
-        balance_match = re.search(r"\$\s*\d[\d,]*(?:\.\d{1,2})?", question)
-        balance_amount = None
-        if balance_match:
-            nearby = question[
-                max(0, balance_match.start() - 55):balance_match.end() + 55
-            ]
-            if re.search(r"\b(?:balance|deposit account|account)\b", nearby, re.I):
-                balance_amount = balance_match.group()
-        consent_supplied = bool(re.search(
-            r"\bSBA\b.{0,70}\b(?:has\s+)?(?:given|granted|provided|approved)\b"
-            r".{0,45}\b(?:written\s+)?consent\b",
-            question,
-            re.I,
-        ))
-
-        if balance_amount and consent_supplied:
-            fact_statement = (
-                f"The question specifies a required account balance of {balance_amount} "
-                "and SBA written consent to the covenant; those facts are supplied, "
-                "not missing. Whether the arrangement otherwise gives the lender a "
-                "preferred position compared with SBA is not established by those "
-                "facts alone."
-            )
-            definition_application = (
-                f"The question states a required account balance of {balance_amount} "
-                "and SBA written consent to this covenant, so neither fact is missing. "
-                "The quoted definition also turns on whether the arrangement gives "
-                "the lender a preferred position compared with SBA."
-            )
-        else:
-            missing_facts = []
-            if not balance_amount:
-                missing_facts.append("a required account balance")
-            if not consent_supplied:
-                missing_facts.append("whether SBA consent has been provided")
-            missing_statement = (
-                f"The facts do not state {' or '.join(missing_facts)}, so "
-                "those details remain unresolved. "
-                if missing_facts else ""
-            )
-            fact_statement = (
-                f"{missing_statement}Whether the arrangement gives the lender a "
-                "preferred position compared with SBA is not established by these "
-                "facts alone."
-            )
-            supplied_details = []
-            if balance_amount:
-                supplied_details.append(
-                    f"a required account balance of {balance_amount}"
-                )
-            if consent_supplied:
-                supplied_details.append("SBA written consent")
-            supplied_statement = (
-                f"The question supplies {' and '.join(supplied_details)}. "
-                if supplied_details else ""
-            )
-            definition_application = (
-                f"{supplied_statement}{missing_statement}The quoted definition "
-                "also turns on whether the arrangement gives the lender a preferred "
-                "position compared with SBA."
-            )
-        return {
-            "text": (
-                "The mandatory deposit-account covenant and rate penalty raise a "
-                "Preference/compensating-balance issue, separately from the interest-rate "
-                "issue. The admitted definition includes a preferred position involving "
-                "control or a compensating balance without SBA consent, and a separate "
-                f"provision prohibits establishing a Preference. {fact_statement} "
-                "The cited provisions do not by themselves resolve the outcome for "
-                "this arrangement."
-            ),
-            "citations": [
-                citation(definition, definition_application),
-                citation(prohibition, "If the deposit covenant gives the lender a "
-                         "Preference within the cited definition, this operative "
-                         "prohibition applies. The rate penalty does not remove "
-                         "the separate Preference issue."),
-            ],
-        }
-    if RATE_RE.search(issue):
-        spread = locate(r"spread.*Note.*may not be changed.*written agreement")
-        default = locate(r"^Default interest rates are not permitted\.$")
-        if not spread or not default:
-            return None
-        amount = re.search(r"\d+(?:\.\d+)?\s*%", question)
-        step = amount.group() if amount else "conditional"
-        return {
-            "text": (
-                f"The covenant proposes a {step} change to the Note rate or spread; "
-                "the analysis is not limited to the label 'default rate'. For a "
-                "variable-rate loan, the quoted rule requires the Borrower's written "
-                "agreement to a spread change during the loan's life, while the "
-                "general interest-rate provision separately prohibits default interest "
-                "rates. The facts do not establish the rate structure or the required "
-                "agreement, so separate Note-rate authorization is not established; "
-                "treating the step-up as a default rate encounters the cited prohibition."
-            ),
-            "citations": [
-                citation(spread, "The proposed step-up changes the loan's Note rate "
-                         "or spread. If the loan is variable-rate, the Borrower's "
-                         "written agreement is material under this quoted rule; the "
-                         "question does not establish whether that requirement is satisfied."),
-                citation(default, "This separately prohibits default interest rates "
-                         "in the assumed Standard 7(a) analysis. Treating failure "
-                         "to maintain accounts as a default does not itself establish "
-                         "authority for the increase under this quoted rule."),
-            ],
-        }
+def percentage_comparison_error(question: str, text: str) -> str | None:
+    arithmetic = trust_ownership_arithmetic(question)
+    if arithmetic is None:
+        return None
+    comparison = re.search(
+        r"(?:combined|aggregate(?:d)?|total)\s+ownership\s+"
+        r"(exceeds|(?:is\s+)?(?:greater|more|less)\s+than|(?:is\s+)?(?:above|below|over|under))"
+        r"\s+(\d+(?:\.\d+)?)\s*%", text, re.I,
+    )
+    if comparison:
+        total = Decimal(arithmetic["sum_percent"])
+        threshold = Decimal(comparison.group(2))
+        less = bool(re.search(r"less|below|under", comparison.group(1), re.I))
+        if (less and total >= threshold) or (not less and total <= threshold):
+            return f"Percentage comparison contradicts supplied arithmetic: the two shares sum to exactly {total}%."
     return None
 
 
@@ -286,6 +208,12 @@ def conclusion_scope_error(candidate: dict[str, Any]) -> str | None:
         and not re.search(r"may not.*preference|preference.*prohibited", quotes, re.I)
     ):
         return "A Preference definition alone does not establish a prohibition; separate operative authority is required."
+    if (
+        re.search(r"\bpreference\b", requested, re.I)
+        and re.search(r"\bprohibited\b|\bimpermissible\b", prose, re.I)
+        and not re.search(r"preferred position", quotes, re.I)
+    ):
+        return "A Preference prohibition alone does not establish that the facts meet its operative definition."
     return None
 
 

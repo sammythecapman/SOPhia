@@ -95,6 +95,14 @@ components:
         chunk_count:
           type: integer
           minimum: 1
+        build_sha:
+          type: string
+          pattern: "^[a-f0-9]{64}$"
+        build_sha_kind:
+          type: string
+          enum: [source-content-sha256]
+        git_commit_sha:
+          type: [string, "null"]
       required:
         - status
         - sop_version
@@ -102,6 +110,9 @@ components:
         - source_url
         - source_sha256
         - chunk_count
+        - build_sha
+        - build_sha_kind
+        - git_commit_sha
     SopQuestion:
       type: object
       additionalProperties: false
@@ -236,6 +247,10 @@ components:
           enum: [supported, not_established, not_applicable, no_responsive_provision, retrieval_empty, unresolved]
         support_note:
           type: [string, "null"]
+        stated_facts:
+          type: array
+          items:
+            type: string
         searched_terms:
           type: array
           items:

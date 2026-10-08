@@ -5,6 +5,7 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+import type { HealthStatusBuildShaKind } from './healthStatusBuildShaKind';
 
 export interface HealthStatus {
   status: string;
@@ -15,4 +16,9 @@ export interface HealthStatus {
   source_sha256: string;
   /** @minimum 1 */
   chunk_count: number;
+  /** @pattern ^[a-f0-9]{64}$ */
+  build_sha: string;
+  build_sha_kind: HealthStatusBuildShaKind;
+  /** @nullable */
+  git_commit_sha: string | null;
 }
